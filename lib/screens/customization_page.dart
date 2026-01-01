@@ -28,13 +28,13 @@ class _CustomizationPageState extends State<CustomizationPage> {
   ];
 
   final List<String> _stickers = [
-    'assets/stickers/sticker1.png',
-    'assets/stickers/sticker2.png',
-    'assets/stickers/sticker3.png',
-    'assets/stickers/sticker4.png',
-    'assets/stickers/sticker5.png',
-    'assets/stickers/sticker6.png',
-    'assets/stickers/sticker7.png',
+    'assets/stickers/sticker1.png', // Index 0 (Vertical)
+    'assets/stickers/sticker2.png', // Index 1 (Vertical)
+    'assets/stickers/sticker3.png', // Index 2 (Vertical)
+    'assets/stickers/sticker4.png', // Index 3 (Vertical)
+    'assets/stickers/sticker5.png', // Index 4 (Grid)
+    'assets/stickers/sticker6.png', // Index 5 (Grid)
+    'assets/stickers/sticker7.png', // Index 6 (Grid)
   ];
 
   @override
@@ -85,84 +85,133 @@ class _CustomizationPageState extends State<CustomizationPage> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/camera_background.png'),
-            fit: BoxFit.cover,
+      // 🔴 FITUR 2: DESELECT KETIKA KLIK DI MANA SAJA
+      body: GestureDetector(
+        onTap: () {
+          // Jika user klik area kosong (selain stiker), hilangkan seleksi
+          if (_selectedStickerIndex != null) {
+            setState(() {
+              _selectedStickerIndex = null;
+            });
+          }
+        },
+        behavior: HitTestBehavior.translucent, // Agar bisa klik tembus area kosong
+        child: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('assets/images/camera_background.png'),
+              fit: BoxFit.cover,
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Text(
-                  'Customize Your Photo',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    shadows: [Shadow(blurRadius: 10, color: Colors.black)],
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Text(
+                    'Customize Your Photo',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      shadows: [Shadow(blurRadius: 10, color: Colors.black)],
+                    ),
                   ),
                 ),
-              ),
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(flex: 2, child: _buildPreviewPanel()),
-                    Expanded(flex: 3, child: _buildCustomizationPanel()),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(flex: 2, child: _buildPreviewPanel()),
+                      Expanded(flex: 3, child: _buildCustomizationPanel()),
+                    ],
+                  ),
                 ),
-              ),
-              _buildFooterButtons(),
-            ],
+                _buildFooterButtons(),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  // ==========================================
+  // PANEL 1: PREVIEW (CANVAS)
+  // ==========================================
   Widget _buildPreviewPanel() {
     return Consumer<PhotoProvider>(
       builder: (context, provider, _) {
-        const double frameWidth = 460.0; 
-        const double frameHeight = 500.0; 
+        
+        // -----------------------------------------------------------
+        // 📐 1. PENGATURAN UKURAN KERTAS / FRAME (FRAME SIZE)
+        // -----------------------------------------------------------
+        double currentFrameWidth;
+        double? currentFrameHeight; 
 
-        return GestureDetector(
-          onTap: () => setState(() => _selectedStickerIndex = null),
-          child: Center(
-            child: Container(
-              margin: const EdgeInsets.all(20),
-              width: frameWidth,
-              height: frameHeight,
-              decoration: BoxDecoration(
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20)],
-              ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // LAYER 1: SUSUNAN FOTO (Custom / Static)
-                  _buildPhotoLayout(provider, frameWidth, frameHeight),
+        if (provider.selectedMode == FrameMode.custom) {
+          if (provider.customLayout == CustomLayout.vertical) {
+            // A. Ukuran Kertas Custom Vertical (Strip)
+            currentFrameWidth = 230.0;  
+            currentFrameHeight = 515.0; 
+          } else {
+            // B. Ukuran Kertas Custom Grid (Kartu)
+            currentFrameWidth = 400.0; 
+            currentFrameHeight = 515.0; 
+          }
+        } else {
+          // C. Ukuran Kertas Static Mode
+          currentFrameWidth = 344.0; 
+          currentFrameHeight = null; // Auto height mengikuti gambar frame
+        }
+        // -----------------------------------------------------------
 
-                  // LAYER 2: FRAME OVERLAY (Static Only)
-                  if (provider.selectedMode == FrameMode.static && provider.selectedFrameAsset != null)
-                    IgnorePointer( 
-                      child: Image.asset(provider.selectedFrameAsset!, fit: BoxFit.fill),
+        // GestureDetector di sini dihapus karena sudah ada di Body (Global)
+        return Align(
+          alignment: Alignment.topCenter,
+          child: Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 40, left: 20, right: 20),
+            width: currentFrameWidth,
+            height: currentFrameHeight,
+            decoration: BoxDecoration(
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20)],
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              alignment: Alignment.center,
+              children: [
+                // LAYER 1: LAYOUT FOTO (Isi)
+                _buildPhotoLayout(provider),
+
+                // LAYER 2: FRAME OVERLAY (Static Only)
+                if (provider.selectedMode == FrameMode.static && provider.selectedFrameAsset != null)
+                   IgnorePointer(
+                     child: Image.asset(
+                       provider.selectedFrameAsset!,
+                       fit: BoxFit.contain, 
+                       width: currentFrameWidth,
+                     ),
+                   ),
+
+                // LAYER 3: STICKERS (SATU PAKET)
+                ...provider.stickers.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final sticker = entry.value;
+                  return Positioned(
+                    // 🔴 PAKSA POSISI DI 0,0 (Supaya pas menutup frame)
+                    left: 0, 
+                    top: 0,
+                    // 🔴 KIRIM UKURAN FRAME KE WIDGET STIKER
+                    child: _buildEditableSticker(
+                      sticker, 
+                      index, 
+                      _selectedStickerIndex == index, 
+                      provider,
+                      frameWidth: currentFrameWidth, // <-- Kirim Lebar Frame
+                      frameHeight: currentFrameHeight, // <-- Kirim Tinggi Frame
                     ),
-
-                  // LAYER 3: STICKERS (Statis, hanya resize/rotate)
-                  ...provider.stickers.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final sticker = entry.value;
-                    return Positioned(
-                      left: sticker.position.dx,
-                      top: sticker.position.dy,
-                      child: _buildEditableSticker(sticker, index, _selectedStickerIndex == index, provider),
-                    );
-                  }).toList(),
-                ],
-              ),
+                  );
+                }).toList(),
+              ],
             ),
           ),
         );
@@ -170,11 +219,11 @@ class _CustomizationPageState extends State<CustomizationPage> {
     );
   }
 
-  Widget _buildPhotoLayout(PhotoProvider provider, double containerWidth, double containerHeight) {
-    // === LOGIKA CUSTOM MODE (4 Foto: Vertical vs Grid) ===
+  // ==========================================
+  // LOGIKA LAYOUT MANAGER
+  // ==========================================
+  Widget _buildPhotoLayout(PhotoProvider provider) {
     if (provider.selectedMode == FrameMode.custom) {
-      
-      // Background Custom
       return Container(
         decoration: BoxDecoration(
           color: provider.frameColor,
@@ -183,11 +232,10 @@ class _CustomizationPageState extends State<CustomizationPage> {
             : null,
         ),
         child: provider.customLayout == CustomLayout.vertical 
-          ? _buildCustomVerticalLayout(provider, containerWidth, containerHeight)
-          : _buildCustomGridLayout(provider, containerWidth, containerHeight),
+          ? _buildCustomVerticalLayout(provider) 
+          : _buildCustomGridLayout(provider),
       );
     } 
-    // === LOGIKA STATIC MODE (Grid Template) ===
     else {
       final layout = provider.selectedLayout;
       return Container(
@@ -203,7 +251,7 @@ class _CustomizationPageState extends State<CustomizationPage> {
           ),
           itemCount: provider.targetPhotoCount == 3 ? 6 : 4,
           itemBuilder: (context, index) {
-            final photosToShow = (provider.targetPhotoCount == 3) 
+             final photosToShow = (provider.targetPhotoCount == 3) 
                 ? (_randomizedPhotos ?? []) 
                 : provider.photos.map((e) => e.imageData).toList();
             if (index >= photosToShow.length) return Container(); 
@@ -214,61 +262,30 @@ class _CustomizationPageState extends State<CustomizationPage> {
     }
   }
 
-// =========================================================
-  // 1. LAYOUT CUSTOM: VERTIKAL (Pengaturan Ukuran Sendiri)
   // =========================================================
-  Widget _buildCustomVerticalLayout(PhotoProvider provider, double containerWidth, double containerHeight) {
-    
-    // --- ⚙️ KONFIGURASI KHUSUS VERTIKAL ⚙️ ---
-    const double photoWidth = 180.0;   // Lebar Foto
-    const double photoHeight = 90.0;   // Tinggi Foto
-    const double spacing = 10.0;       // Jarak antar foto
-    const double borderRadius = 10.0;  // Lengkungan sudut
-    const double borderWidth = 4.0;    // Tebal frame putih
-    // ------------------------------------------
-
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center, // Posisi di tengah vertikal
-      children: provider.photos.map((photo) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: spacing / 2),
-          child: _buildSinglePhoto(
-            bytes: photo.imageData, 
-            w: photoWidth, 
-            h: photoHeight,
-            radius: borderRadius,
-            border: borderWidth,
-          ),
-        );
-      }).toList(),
-    );
-  }
-
+  // ⚙️ 1. PENGATURAN FOTO CUSTOM VERTIKAL (STRIP)
   // =========================================================
-  // 2. LAYOUT CUSTOM: GRID 2x2 (Pengaturan Ukuran Sendiri)
-  // =========================================================
-  Widget _buildCustomGridLayout(PhotoProvider provider, double containerWidth, double containerHeight) {
-    
-    // --- ⚙️ KONFIGURASI KHUSUS GRID ⚙️ ---
-    const double photoWidth = 100.0;   // Lebar Foto (Lebih kecil biar muat 2)
-    const double photoHeight = 100.0;  // Tinggi Foto (Misal kotak)
-    const double spacing = 15.0;       // Jarak antar foto
-    const double borderRadius = 15.0;  // Lengkungan sudut (Beda dengan vertikal)
-    const double borderWidth = 2.0;    // Tebal frame putih (Lebih tipis)
-    // --------------------------------------
+  Widget _buildCustomVerticalLayout(PhotoProvider provider) {
+    // Ukuran Foto
+    const double photoWidth  = 170.0; 
+    const double photoHeight = 110.0; 
+    const double spacing     = 8.0;   
+    const double radius      = 20.0;  
+    const double border      = 1.0;   
 
     return Center(
-      child: Wrap(
-        spacing: spacing,
-        runSpacing: spacing,
-        alignment: WrapAlignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: provider.photos.map((photo) {
-          return _buildSinglePhoto(
-            bytes: photo.imageData, 
-            w: photoWidth, 
-            h: photoHeight,
-            radius: borderRadius,
-            border: borderWidth,
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: spacing / 2),
+            child: _buildSinglePhoto(
+              bytes: photo.imageData, 
+              w: photoWidth, 
+              h: photoHeight,
+              radius: radius,
+              border: border,
+            ),
           );
         }).toList(),
       ),
@@ -276,8 +293,34 @@ class _CustomizationPageState extends State<CustomizationPage> {
   }
 
   // =========================================================
-  // 3. WIDGET FOTO SATUAN (Helper)
+  // ⚙️ 2. PENGATURAN FOTO CUSTOM GRID (KARTU 2x2)
   // =========================================================
+  Widget _buildCustomGridLayout(PhotoProvider provider) {
+    // Ukuran Foto
+    const double gridPhotoWidth  = 180.0; 
+    const double gridPhotoHeight = 160.0; 
+    const double gridSpacing     = 10.0;  
+    const double gridRadius      = 20.0;  
+    const double gridBorder      = 2.0;   
+
+    return Center(
+      child: Wrap(
+        spacing: gridSpacing,    
+        runSpacing: gridSpacing, 
+        alignment: WrapAlignment.center,
+        children: provider.photos.map((photo) {
+          return _buildSinglePhoto(
+            bytes: photo.imageData, 
+            w: gridPhotoWidth, 
+            h: gridPhotoHeight,
+            radius: gridRadius,
+            border: gridBorder,
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   Widget _buildSinglePhoto({
     required Uint8List bytes, 
     required double w, 
@@ -289,20 +332,20 @@ class _CustomizationPageState extends State<CustomizationPage> {
       width: w,
       height: h,
       decoration: BoxDecoration(
-        // Frame Putih
         border: Border.all(color: Colors.white, width: border),
         borderRadius: BorderRadius.circular(radius),
-        // Shadow
         boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
       ),
-      // ClipRRect agar foto mengikuti lengkungan border
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(radius - border),
+        borderRadius: BorderRadius.circular(radius - border > 0 ? radius - border : 0),
         child: Image.memory(bytes, fit: BoxFit.cover),
       ),
     );
   }
 
+  // ==========================================
+  // PANEL 2: TOOLS (MENU KANAN)
+  // ==========================================
   Widget _buildCustomizationPanel() {
     return Consumer<PhotoProvider>(
       builder: (context, provider, _) {
@@ -323,21 +366,17 @@ class _CustomizationPageState extends State<CustomizationPage> {
               const Divider(),
               const SizedBox(height: 10),
 
-              // === FITUR KHUSUS CUSTOM MODE ===
               if (provider.selectedMode == FrameMode.custom) ...[
-                 // 1. PILIHAN LAYOUT (Vertical vs Grid)
                  const Text("Choose Layout:", style: TextStyle(fontWeight: FontWeight.bold)),
                  const SizedBox(height: 10),
                  Row(
                    children: [
-                     _buildLayoutOption(provider, CustomLayout.vertical, Icons.view_agenda, "Vertical"),
+                     _buildLayoutOption(provider, CustomLayout.vertical, Icons.view_agenda, "Strip"),
                      const SizedBox(width: 15),
-                     _buildLayoutOption(provider, CustomLayout.grid, Icons.grid_view, "Grid 2x2"),
+                     _buildLayoutOption(provider, CustomLayout.grid, Icons.grid_view, "Grid Card"),
                    ],
                  ),
                  const SizedBox(height: 20),
-                 
-                 // 2. Background Color/Texture
                  _buildFrameColorSection(),
                  const SizedBox(height: 20),
               ],
@@ -353,7 +392,22 @@ class _CustomizationPageState extends State<CustomizationPage> {
   Widget _buildLayoutOption(PhotoProvider provider, CustomLayout layout, IconData icon, String label) {
     final isSelected = provider.customLayout == layout;
     return GestureDetector(
-      onTap: () => provider.setCustomLayout(layout),
+      onTap: () {
+        // Cek apakah layout berubah
+        if (provider.customLayout != layout) {
+          provider.setCustomLayout(layout);
+          
+          // 🔴 FITUR 1: AUTO CLEAR STICKERS KETIKA GANTI LAYOUT
+          // Kita hapus stiker satu per satu karena Provider tidak punya fungsi clearSticker khusus
+          while (provider.stickers.isNotEmpty) {
+            provider.removeSticker(0);
+          }
+          // Reset seleksi juga
+          setState(() {
+            _selectedStickerIndex = null;
+          });
+        }
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         decoration: BoxDecoration(
@@ -429,30 +483,43 @@ class _CustomizationPageState extends State<CustomizationPage> {
   Widget _buildStickersSection() {
     return Consumer<PhotoProvider>(
       builder: (context, provider, _) {
+        
+        // LOGIKA FILTER STIKER
+        List<String> displayedStickers;
+        if (provider.selectedMode == FrameMode.custom) {
+           if (provider.customLayout == CustomLayout.vertical) {
+             displayedStickers = _stickers.sublist(0, 4); 
+           } else {
+             displayedStickers = _stickers.sublist(4); 
+           }
+        } else {
+           displayedStickers = _stickers;
+        }
+
         return Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Add Stickers (Resize Only)', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('Add Sticker Package', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               Expanded(
                 child: GridView.builder(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 5,
+                    crossAxisCount: 5, 
                     crossAxisSpacing: 10,
                     mainAxisSpacing: 10,
                   ),
-                  itemCount: _stickers.length,
+                  itemCount: displayedStickers.length, 
                   itemBuilder: (context, index) {
                     return GestureDetector(
-                      onTap: () => provider.addSticker(_stickers[index]),
+                      onTap: () => provider.addSticker(displayedStickers[index]),
                       child: Container(
                         decoration: BoxDecoration(
                           color: Colors.grey[200],
                           borderRadius: BorderRadius.circular(10),
                         ),
                         padding: const EdgeInsets.all(5),
-                        child: Image.asset(_stickers[index]),
+                        child: Image.asset(displayedStickers[index]),
                       ),
                     );
                   },
@@ -465,68 +532,61 @@ class _CustomizationPageState extends State<CustomizationPage> {
     );
   }
 
-  // --- REVISI: STIKER STATIS (TIDAK BISA DIGESER) ---
-  Widget _buildEditableSticker(StickerData sticker, int index, bool isSelected, PhotoProvider provider) {
+// --- STIKER STATIS & FULL SIZE (PAKET) ---
+  Widget _buildEditableSticker(
+    StickerData sticker, 
+    int index, 
+    bool isSelected, 
+    PhotoProvider provider, {
+    required double frameWidth, 
+    required double? frameHeight,
+  }) {
     return GestureDetector(
       onTap: () {
         setState(() {
           _selectedStickerIndex = index;
         });
       },
-      // ❌ onPanUpdate DIHAPUS (Biar posisi tidak bisa digeser)
-      
       child: Stack(
         children: [
           Transform.rotate(
             angle: sticker.rotation,
+            // Container pembungkus stiker TANPA DECORATION BORDER
             child: Container(
-              decoration: isSelected 
-                ? BoxDecoration(border: Border.all(color: Colors.blue, width: 2)) 
-                : null,
+              // 🔴 Alignment TopLeft tetap penting untuk anchor point
+              alignment: Alignment.topLeft, 
+
+              // HAPUS DECORATION BORDER DISINI AGAR UKURAN MURNI
+              // decoration: isSelected ? ... : null,  <-- HAPUS INI
+
+              // Gambar Stiker
               child: Image.asset(
-                sticker.assetPath,
-                width: sticker.size,
-                height: sticker.size,
+                sticker.assetPath, 
+                width: frameWidth, 
+                height: frameHeight, 
+                fit: BoxFit.contain, 
               ),
             ),
           ),
-          // Handle Resize (Tetap Ada)
+          
+          // Indikator Seleksi: Hanya Tombol Hapus (X)
+          // Border biru dihilangkan agar tidak mengganggu layout pixel-perfect
           if (isSelected)
             Positioned(
-              right: -10, bottom: -10,
-              child: GestureDetector(
-                onPanUpdate: (details) {
-                   provider.updateStickerSize(index, sticker.size + details.delta.dx);
-                },
-                child: const Icon(Icons.zoom_out_map, color: Colors.blue, size: 20),
-              ),
-            ),
-          // Handle Rotate (Tetap Ada)
-          if (isSelected)
-            Positioned(
-              right: -10, top: -10,
-              child: GestureDetector(
-                onPanUpdate: (details) {
-                   final center = Offset(sticker.size / 2, sticker.size / 2);
-                   final angle = math.atan2(
-                     details.localPosition.dy - center.dy,
-                     details.localPosition.dx - center.dx,
-                   );
-                   provider.updateStickerRotation(index, angle);
-                },
-                child: const Icon(Icons.rotate_right, color: Colors.green, size: 20),
-              ),
-            ),
-          // Handle Delete (Tetap Ada)
-          if (isSelected)
-            Positioned(
-              left: -10, top: -10,
+              right: 10, top: 10, 
               child: GestureDetector(
                 onTap: () {
                   provider.removeSticker(index);
                   setState(() => _selectedStickerIndex = null);
                 },
-                child: const Icon(Icons.cancel, color: Colors.red, size: 20),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                  ),
+                  child: const Icon(Icons.cancel, color: Colors.red, size: 30),
+                ),
               ),
             ),
         ],
