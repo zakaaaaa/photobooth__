@@ -73,7 +73,21 @@ class PhotoProvider extends ChangeNotifier {
     final seconds = (_remainingTime % 60).toString().padLeft(2, '0');
     return "$minutes:$seconds";
   }
+// === TAMBAHKAN KODE INI ===
+  String _sessionUuid = ''; 
+  
+  String get sessionUuid => _sessionUuid;
 
+  void setSessionUuid(String uuid) {
+    _sessionUuid = uuid;
+    notifyListeners();
+  }
+void removePhotoAt(int index) {
+  if (index >= 0 && index < _photos.length) {
+    _photos.removeAt(index);
+    notifyListeners();
+  }
+}
   void startSession() {
     reset(); 
     _remainingTime = 320; 
@@ -96,6 +110,13 @@ class PhotoProvider extends ChangeNotifier {
     _isSessionActive = false;
     notifyListeners();
   }
+  Uint8List? _finalImageBytes;
+Uint8List? get finalImageBytes => _finalImageBytes;
+
+void setFinalImageBytes(Uint8List bytes) {
+  _finalImageBytes = bytes;
+  notifyListeners();
+}
 
   // --- B. FRAME CONFIGURATION STATE ---
   FrameMode _selectedMode = FrameMode.static;

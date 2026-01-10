@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'dart:math' as math;
-import 'package:photobooth_app/providers/photo_provider.dart';
-import 'package:photobooth_app/screens/camera_page.dart';
-import 'package:photobooth_app/screens/preview_print_page.dart';
 import 'dart:typed_data';
+import 'package:photobooth_app/providers/photo_provider.dart';
+import 'package:photobooth_app/screens/camera_page.dart'; 
+import 'package:photobooth_app/screens/preview_print_page.dart';
 
 class CustomizationPage extends StatefulWidget {
   const CustomizationPage({super.key});
@@ -28,13 +28,13 @@ class _CustomizationPageState extends State<CustomizationPage> {
   ];
 
   final List<String> _stickers = [
-    'assets/stickers/sticker1.png', // Index 0 (Vertical)
-    'assets/stickers/sticker2.png', // Index 1 (Vertical)
-    'assets/stickers/sticker3.png', // Index 2 (Vertical)
-    'assets/stickers/sticker4.png', // Index 3 (Vertical)
-    'assets/stickers/sticker5.png', // Index 4 (Grid)
-    'assets/stickers/sticker6.png', // Index 5 (Grid)
-    'assets/stickers/sticker7.png', // Index 6 (Grid)
+    'assets/stickers/sticker1.png', 
+    'assets/stickers/sticker2.png', 
+    'assets/stickers/sticker3.png', 
+    'assets/stickers/sticker4.png', 
+    'assets/stickers/sticker5.png', 
+    'assets/stickers/sticker6.png', 
+    'assets/stickers/sticker7.png', 
   ];
 
   @override
@@ -85,47 +85,54 @@ class _CustomizationPageState extends State<CustomizationPage> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      // 🔴 FITUR 2: DESELECT KETIKA KLIK DI MANA SAJA
       body: GestureDetector(
         onTap: () {
-          // Jika user klik area kosong (selain stiker), hilangkan seleksi
           if (_selectedStickerIndex != null) {
             setState(() {
               _selectedStickerIndex = null;
             });
           }
         },
-        behavior: HitTestBehavior.translucent, // Agar bisa klik tembus area kosong
+        behavior: HitTestBehavior.translucent, 
         child: Container(
           decoration: const BoxDecoration(
             image: DecorationImage(
-              image: AssetImage('assets/images/camera_background.png'),
+              image: AssetImage('assets/images/bg.png'), 
               fit: BoxFit.cover,
             ),
           ),
           child: SafeArea(
             child: Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Text(
-                    'Customize Your Photo',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      shadows: [Shadow(blurRadius: 10, color: Colors.black)],
-                    ),
+                // HEADER
+                const Padding(
+                  padding: EdgeInsets.only(top: 20.0, bottom: 20.0),
+                  child: OutlinedText(
+                    text: "CUSTOMIZE\nYOUR FRAME",
+                    fontFamily: 'Ambitsek',
+                    fontSize: 40,
+                    textColor: Color(0xFFFFED00),
+                    outlineColor: Color(0xFFEF7D30),
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2.0,
+                    hasShadow: true,
                   ),
                 ),
+
                 Expanded(
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // PANEL KIRI: PREVIEW (Canvas)
                       Expanded(flex: 2, child: _buildPreviewPanel()),
-                      Expanded(flex: 3, child: _buildCustomizationPanel()),
+                      
+                      // PANEL KANAN: TOOLS
+                      Expanded(flex: 2, child: _buildCustomizationPanel()), 
                     ],
                   ),
                 ),
+                
+                // FOOTER BUTTON (NEXT)
                 _buildFooterButtons(),
               ],
             ),
@@ -136,78 +143,62 @@ class _CustomizationPageState extends State<CustomizationPage> {
   }
 
   // ==========================================
-  // PANEL 1: PREVIEW (CANVAS)
+  // PANEL 1: PREVIEW (CANVAS) - [REVISI SIZE]
   // ==========================================
   Widget _buildPreviewPanel() {
     return Consumer<PhotoProvider>(
       builder: (context, provider, _) {
-        
-        // -----------------------------------------------------------
-        // 📐 1. PENGATURAN UKURAN KERTAS / FRAME (FRAME SIZE)
-        // -----------------------------------------------------------
         double currentFrameWidth;
-        double? currentFrameHeight; 
+        // [REVISI] Tinggi dibuat konsisten 515.0 untuk semua mode
+        const double currentFrameHeight = 515.0; 
 
         if (provider.selectedMode == FrameMode.custom) {
           if (provider.customLayout == CustomLayout.vertical) {
-            // A. Ukuran Kertas Custom Vertical (Strip)
             currentFrameWidth = 230.0;  
-            currentFrameHeight = 515.0; 
           } else {
-            // B. Ukuran Kertas Custom Grid (Kartu)
             currentFrameWidth = 400.0; 
-            currentFrameHeight = 515.0; 
           }
         } else {
-          // C. Ukuran Kertas Static Mode
+          // Static Mode (Lebar disamakan dengan PreviewPrintPage)
           currentFrameWidth = 344.0; 
-          currentFrameHeight = null; // Auto height mengikuti gambar frame
         }
-        // -----------------------------------------------------------
 
-        // GestureDetector di sini dihapus karena sudah ada di Body (Global)
-        return Align(
-          alignment: Alignment.topCenter,
+        return Center(
           child: Container(
-            margin: const EdgeInsets.only(top: 10, bottom: 40, left: 20, right: 20),
+            margin: const EdgeInsets.symmetric(horizontal: 20),
             width: currentFrameWidth,
             height: currentFrameHeight,
             decoration: BoxDecoration(
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20)],
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20)],
             ),
             child: Stack(
               fit: StackFit.expand,
               alignment: Alignment.center,
               children: [
-                // LAYER 1: LAYOUT FOTO (Isi)
                 _buildPhotoLayout(provider),
 
-                // LAYER 2: FRAME OVERLAY (Static Only)
                 if (provider.selectedMode == FrameMode.static && provider.selectedFrameAsset != null)
                    IgnorePointer(
                      child: Image.asset(
                        provider.selectedFrameAsset!,
                        fit: BoxFit.contain, 
                        width: currentFrameWidth,
+                       height: currentFrameHeight,
                      ),
                    ),
 
-                // LAYER 3: STICKERS (SATU PAKET)
                 ...provider.stickers.asMap().entries.map((entry) {
                   final index = entry.key;
                   final sticker = entry.value;
                   return Positioned(
-                    // 🔴 PAKSA POSISI DI 0,0 (Supaya pas menutup frame)
-                    left: 0, 
-                    top: 0,
-                    // 🔴 KIRIM UKURAN FRAME KE WIDGET STIKER
+                    left: 0, top: 0,
                     child: _buildEditableSticker(
                       sticker, 
                       index, 
                       _selectedStickerIndex == index, 
                       provider,
-                      frameWidth: currentFrameWidth, // <-- Kirim Lebar Frame
-                      frameHeight: currentFrameHeight, // <-- Kirim Tinggi Frame
+                      frameWidth: currentFrameWidth, 
+                      frameHeight: currentFrameHeight, 
                     ),
                   );
                 }).toList(),
@@ -262,16 +253,12 @@ class _CustomizationPageState extends State<CustomizationPage> {
     }
   }
 
-  // =========================================================
-  // ⚙️ 1. PENGATURAN FOTO CUSTOM VERTIKAL (STRIP)
-  // =========================================================
   Widget _buildCustomVerticalLayout(PhotoProvider provider) {
-    // Ukuran Foto
     const double photoWidth  = 170.0; 
-    const double photoHeight = 110.0; 
-    const double spacing     = 8.0;   
+    const double photoHeight = 100.0; 
+    const double spacing     = 10.8;   
     const double radius      = 20.0;  
-    const double border      = 1.0;   
+    const double border      = 0.0;   
 
     return Center(
       child: Column(
@@ -292,11 +279,7 @@ class _CustomizationPageState extends State<CustomizationPage> {
     );
   }
 
-  // =========================================================
-  // ⚙️ 2. PENGATURAN FOTO CUSTOM GRID (KARTU 2x2)
-  // =========================================================
   Widget _buildCustomGridLayout(PhotoProvider provider) {
-    // Ukuran Foto
     const double gridPhotoWidth  = 180.0; 
     const double gridPhotoHeight = 160.0; 
     const double gridSpacing     = 10.0;  
@@ -321,16 +304,9 @@ class _CustomizationPageState extends State<CustomizationPage> {
     );
   }
 
-  Widget _buildSinglePhoto({
-    required Uint8List bytes, 
-    required double w, 
-    required double h,
-    required double radius,
-    required double border,
-  }) {
+  Widget _buildSinglePhoto({required Uint8List bytes, required double w, required double h, required double radius, required double border}) {
     return Container(
-      width: w,
-      height: h,
+      width: w, height: h,
       decoration: BoxDecoration(
         border: Border.all(color: Colors.white, width: border),
         borderRadius: BorderRadius.circular(radius),
@@ -344,44 +320,68 @@ class _CustomizationPageState extends State<CustomizationPage> {
   }
 
   // ==========================================
-  // PANEL 2: TOOLS (MENU KANAN)
+  // PANEL 2: TOOLS (MENU KANAN - STYLE WINDOWS 95)
   // ==========================================
   Widget _buildCustomizationPanel() {
     return Consumer<PhotoProvider>(
       builder: (context, provider, _) {
         return Container(
-          margin: const EdgeInsets.all(20),
-          padding: const EdgeInsets.all(20),
+          margin: const EdgeInsets.only(top: 10, bottom: 40, right: 40),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.9),
-            borderRadius: BorderRadius.circular(20),
+            color: const Color(0xFFC0C0C0), 
+            border: Border.all(width: 4, color: Colors.black),
+            boxShadow: const [BoxShadow(color: Colors.black54, offset: Offset(8, 8), blurRadius: 0)],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                provider.selectedMode == FrameMode.static ? 'Stickers' : 'Custom Layout & Tools',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              // HEADER BIRU
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 15),
+                color: const Color(0xFF0000AA),
+                child: Text(
+                  provider.selectedMode == FrameMode.static ? 'STICKER PACK' : 'CUSTOM TOOLS',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins', 
+                    fontSize: 18, 
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 1.0,
+                  ),
+                ),
               ),
-              const Divider(),
-              const SizedBox(height: 10),
 
-              if (provider.selectedMode == FrameMode.custom) ...[
-                 const Text("Choose Layout:", style: TextStyle(fontWeight: FontWeight.bold)),
-                 const SizedBox(height: 10),
-                 Row(
-                   children: [
-                     _buildLayoutOption(provider, CustomLayout.vertical, Icons.view_agenda, "Strip"),
-                     const SizedBox(width: 15),
-                     _buildLayoutOption(provider, CustomLayout.grid, Icons.grid_view, "Grid Card"),
-                   ],
-                 ),
-                 const SizedBox(height: 20),
-                 _buildFrameColorSection(),
-                 const SizedBox(height: 20),
-              ],
+              // ISI KONTEN
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (provider.selectedMode == FrameMode.custom) ...[
+                         const Text("Choose Layout:", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Poppins')),
+                         const SizedBox(height: 10),
+                         Row(
+                           children: [
+                             _buildLayoutOption(provider, CustomLayout.vertical, Icons.view_agenda, "Strip"),
+                             const SizedBox(width: 15),
+                             _buildLayoutOption(provider, CustomLayout.grid, Icons.grid_view, "Grid"),
+                           ],
+                         ),
+                         const SizedBox(height: 20),
+                         const Divider(color: Colors.black54, thickness: 2),
+                         const SizedBox(height: 10),
+                         _buildFrameColorSection(),
+                         const SizedBox(height: 20),
+                         const Divider(color: Colors.black54, thickness: 2),
+                         const SizedBox(height: 10),
+                      ],
 
-              _buildStickersSection(),
+                      _buildStickersSection(),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         );
@@ -391,36 +391,34 @@ class _CustomizationPageState extends State<CustomizationPage> {
 
   Widget _buildLayoutOption(PhotoProvider provider, CustomLayout layout, IconData icon, String label) {
     final isSelected = provider.customLayout == layout;
-    return GestureDetector(
-      onTap: () {
-        // Cek apakah layout berubah
-        if (provider.customLayout != layout) {
-          provider.setCustomLayout(layout);
-          
-          // 🔴 FITUR 1: AUTO CLEAR STICKERS KETIKA GANTI LAYOUT
-          // Kita hapus stiker satu per satu karena Provider tidak punya fungsi clearSticker khusus
-          while (provider.stickers.isNotEmpty) {
-            provider.removeSticker(0);
+    return Expanded( 
+      child: GestureDetector(
+        onTap: () {
+          if (provider.customLayout != layout) {
+            provider.setCustomLayout(layout);
+            while (provider.stickers.isNotEmpty) {
+              provider.removeSticker(0);
+            }
+            setState(() { _selectedStickerIndex = null; });
           }
-          // Reset seleksi juga
-          setState(() {
-            _selectedStickerIndex = null;
-          });
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.blueAccent : Colors.grey[200],
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? Colors.blue : Colors.grey[300]!),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: isSelected ? Colors.white : Colors.black54),
-            const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
-          ],
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.blue[800] : Colors.white,
+            border: Border.all(width: 2, color: Colors.black),
+            boxShadow: isSelected 
+                ? [] 
+                : const [BoxShadow(color: Colors.black54, offset: Offset(2, 2))],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: isSelected ? Colors.white : Colors.black, size: 20),
+              const SizedBox(width: 8),
+              Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Poppins')),
+            ],
+          ),
         ),
       ),
     );
@@ -432,7 +430,7 @@ class _CustomizationPageState extends State<CustomizationPage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Background Style', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Background Style', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Poppins')),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -442,16 +440,17 @@ class _CustomizationPageState extends State<CustomizationPage> {
                     width: 50, height: 50,
                     decoration: BoxDecoration(
                       color: provider.frameColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.grey, width: 2),
+                      border: Border.all(color: Colors.black, width: 2),
+                      boxShadow: const [BoxShadow(color: Colors.black54, offset: Offset(2, 2))],
                     ),
-                    child: const Icon(Icons.colorize, color: Colors.white),
+                    // [REVISI ICON] Color Wheel Icon
+                    child: const Icon(Icons.color_lens, color: Colors.white, size: 30), 
                   ),
                 ),
                 const SizedBox(width: 15),
                 Expanded(
                   child: SizedBox(
-                    height: 60,
+                    height: 50,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       itemCount: _textures.length,
@@ -459,11 +458,10 @@ class _CustomizationPageState extends State<CustomizationPage> {
                         return GestureDetector(
                           onTap: () => provider.setFrameTexture(_textures[index]),
                           child: Container(
-                            width: 60,
+                            width: 50,
                             margin: const EdgeInsets.only(right: 10),
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: provider.frameTexture == _textures[index] ? Colors.blue : Colors.grey, width: 2),
+                              border: Border.all(color: Colors.black, width: 2),
                               image: DecorationImage(image: AssetImage(_textures[index]), fit: BoxFit.cover),
                             ),
                           ),
@@ -483,8 +481,6 @@ class _CustomizationPageState extends State<CustomizationPage> {
   Widget _buildStickersSection() {
     return Consumer<PhotoProvider>(
       builder: (context, provider, _) {
-        
-        // LOGIKA FILTER STIKER
         List<String> displayedStickers;
         if (provider.selectedMode == FrameMode.custom) {
            if (provider.customLayout == CustomLayout.vertical) {
@@ -496,70 +492,50 @@ class _CustomizationPageState extends State<CustomizationPage> {
            displayedStickers = _stickers;
         }
 
-        return Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Add Sticker Package', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              Expanded(
-                child: GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 5, 
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                  ),
-                  itemCount: displayedStickers.length, 
-                  itemBuilder: (context, index) {
-                    return GestureDetector(
-                      onTap: () => provider.addSticker(displayedStickers[index]),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        padding: const EdgeInsets.all(5),
-                        child: Image.asset(displayedStickers[index]),
-                      ),
-                    );
-                  },
-                ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Add Sticker Package', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Poppins')),
+            const SizedBox(height: 10),
+            GridView.builder(
+              shrinkWrap: true, 
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4, 
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
               ),
-            ],
-          ),
+              itemCount: displayedStickers.length, 
+              itemBuilder: (context, index) {
+                return GestureDetector(
+                  onTap: () => provider.addSticker(displayedStickers[index]),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(width: 2, color: Colors.black),
+                      boxShadow: const [BoxShadow(color: Colors.black26, offset: Offset(2, 2))],
+                    ),
+                    padding: const EdgeInsets.all(5),
+                    child: Image.asset(displayedStickers[index]),
+                  ),
+                );
+              },
+            ),
+          ],
         );
       },
     );
   }
 
-// --- STIKER STATIS & FULL SIZE (PAKET) ---
-  Widget _buildEditableSticker(
-    StickerData sticker, 
-    int index, 
-    bool isSelected, 
-    PhotoProvider provider, {
-    required double frameWidth, 
-    required double? frameHeight,
-  }) {
+  Widget _buildEditableSticker(StickerData sticker, int index, bool isSelected, PhotoProvider provider, {required double frameWidth, required double? frameHeight}) {
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedStickerIndex = index;
-        });
-      },
+      onTap: () => setState(() => _selectedStickerIndex = index),
       child: Stack(
         children: [
           Transform.rotate(
             angle: sticker.rotation,
-            // Container pembungkus stiker TANPA DECORATION BORDER
             child: Container(
-              // 🔴 Alignment TopLeft tetap penting untuk anchor point
               alignment: Alignment.topLeft, 
-
-              // HAPUS DECORATION BORDER DISINI AGAR UKURAN MURNI
-              // decoration: isSelected ? ... : null,  <-- HAPUS INI
-
-              // Gambar Stiker
               child: Image.asset(
                 sticker.assetPath, 
                 width: frameWidth, 
@@ -569,8 +545,6 @@ class _CustomizationPageState extends State<CustomizationPage> {
             ),
           ),
           
-          // Indikator Seleksi: Hanya Tombol Hapus (X)
-          // Border biru dihilangkan agar tidak mengganggu layout pixel-perfect
           if (isSelected)
             Positioned(
               right: 10, top: 10, 
@@ -580,12 +554,13 @@ class _CustomizationPageState extends State<CustomizationPage> {
                   setState(() => _selectedStickerIndex = null);
                 },
                 child: Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
+                  decoration: BoxDecoration(
+                    color: Colors.red,
                     shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                    border: Border.all(width: 2, color: Colors.white),
+                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
                   ),
-                  child: const Icon(Icons.cancel, color: Colors.red, size: 30),
+                  child: const Icon(Icons.close, color: Colors.white, size: 24),
                 ),
               ),
             ),
@@ -596,41 +571,80 @@ class _CustomizationPageState extends State<CustomizationPage> {
 
   Widget _buildFooterButtons() {
     return Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          ElevatedButton.icon(
-            onPressed: () {
-              Provider.of<PhotoProvider>(context, listen: false).clearPhotos();
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const CameraPage()),
-              );
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retake'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-            ),
-          ),
+      padding: const EdgeInsets.only(bottom: 20.0),
+      child: NextImageButton(
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const PreviewPrintPage()),
+          );
+        },
+      ),
+    );
+  }
+}
 
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const PreviewPrintPage()),
-              );
-            },
-            icon: const Icon(Icons.print),
-            label: const Text('Finish & Print'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-            ),
+// WIDGET HELPER: OUTLINED TEXT 
+class OutlinedText extends StatelessWidget {
+  final String text;
+  final String fontFamily;
+  final double fontSize;
+  final Color textColor;
+  final Color outlineColor;
+  final FontWeight fontWeight;
+  final double letterSpacing;
+  final bool hasShadow;
+
+  const OutlinedText({super.key, required this.text, required this.fontFamily, required this.fontSize, required this.textColor, required this.outlineColor, this.fontWeight = FontWeight.normal, this.letterSpacing = 0.0, this.hasShadow = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        if (hasShadow)
+          Positioned(top: 4, left: 4, child: Text(text, textAlign: TextAlign.center, style: TextStyle(fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2, color: Colors.black.withValues(alpha: 0.6)))),
+        Text(text, textAlign: TextAlign.center, style: TextStyle(fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2, foreground: Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = outlineColor)),
+        Text(text, textAlign: TextAlign.center, style: TextStyle(fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2, color: textColor)),
+      ],
+    );
+  }
+}
+
+// WIDGET HELPER: NEXT IMAGE BUTTON
+class NextImageButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  const NextImageButton({super.key, required this.onPressed});
+
+  @override
+  State<NextImageButton> createState() => _NextImageButtonState();
+}
+
+class _NextImageButtonState extends State<NextImageButton> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) {
+          setState(() => _isPressed = false);
+          widget.onPressed();
+        },
+        onTapCancel: () => setState(() => _isPressed = false),
+        child: AnimatedScale(
+          scale: _isPressed ? 0.9 : (_isHovered ? 1.05 : 1.0),
+          duration: const Duration(milliseconds: 100),
+          child: Image.asset(
+            "assets/images/next.png", 
+            width: 180, 
+            height: 96, 
+            fit: BoxFit.contain,
           ),
-        ],
+        ),
       ),
     );
   }

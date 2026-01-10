@@ -39,6 +39,7 @@ dependencies:
   camera: ^0.11.0
   camera_windows: ^0.2.6+4
   device_info_plus: ^12.3.0
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
@@ -54,6 +55,7 @@ flutter:
     - assets/stickers/
     - assets/filters/
     - assets/frames/
+    - assets/images/back_cam.png
   
   fonts:
     - family: Poppins
@@ -61,3 +63,6 @@ flutter:
         - asset: assets/fonts/Poppins-Regular.ttf
         - asset: assets/fonts/Poppins-Bold.ttf
           weight: 700
+        - asset: assets/fonts/ambitsek.ttf
+        - asset: assets/fonts/Pixeland.ttf
+      

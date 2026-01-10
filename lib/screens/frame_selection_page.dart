@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/photo_provider.dart';
-import 'payment_page.dart';
-import 'static_frame_template_page.dart'; // <-- PENTING: IMPORT HALAMAN BARU TADI
+import 'camera_page.dart';
+import 'static_frame_template_page.dart'; 
 
 class FrameSelectionPage extends StatelessWidget {
   const FrameSelectionPage({super.key});
@@ -10,217 +10,201 @@ class FrameSelectionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          "PILIH GAYA FOTO",
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2.0,
-          ),
-        ),
-        centerTitle: true,
-      ),
       body: Stack(
-        fit: StackFit.expand,
         children: [
-          // 1. BACKGROUND IMAGE (Gunakan aset yang diminta)
-          Image.asset(
-            'assets/images/camera_background.png',
-            fit: BoxFit.cover,
+          // 1. BACKGROUND IMAGE
+          Positioned.fill(
+            child: Image.asset(
+              "assets/images/bg.png",
+              fit: BoxFit.cover,
+            ),
           ),
-          // 2. OVERLAY GELAP (Agar konten terbaca jelas)
-          Container(color: Colors.black.withOpacity(0.6)),
 
-          // 3. KONTEN KARTU PILIHAN
+          // 2. KONTEN UTAMA
           Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // --- KARTU 1: STATIC FRAME ---
-                  Expanded(
-                    child: _buildSelectionCard(
-                      context,
-                      title: "STATIC FRAME",
-                      subtitle: "Pilihan Template Siap Pakai",
-                      description: "Pilih berbagai layout menarik.\nAda pilihan 3 foto (strip) atau 4 foto (grid).",
-                      icon: Icons.grid_view_rounded,
-                      colorAccent: Colors.blueAccent,
-                      photoCountBadge: "3 / 4 Foto",
-                      onTap: () => _selectStaticFrame(context), // <-- Arahkan ke fungsi baru
-                    ),
-                  ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // HEADLINE (Tetap pakai Ambitsek biar konsisten sama judul lain)
+                const OutlinedText(
+                  text: "CHOOSE\nCATEGORY TEMPLATE",
+                  fontFamily: 'Ambitsek',
+                  fontSize: 65, 
+                  textColor: Color(0xFFFFED00), // Kuning
+                  outlineColor: Color(0xFFEF7D30), // Oranye
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.0,
+                  hasShadow: true,
+                ),
 
-                  const SizedBox(width: 30),
+                const SizedBox(height: 60), 
 
-                  // --- KARTU 2: CUSTOM MODE ---
-                  Expanded(
-                    child: _buildSelectionCard(
+                // --- TOMBOL 1: STATIC FRAME (Pakai btn.png + Font Pixeland) ---
+                ImageButton(
+                  text: "Static Frame",
+                  onTap: () {
+                    Navigator.push(
                       context,
-                      title: "CUSTOM MODE",
-                      subtitle: "Bebas Berkreasi",
-                      description: "Mode bebas! Edit fotomu dengan filter & stiker sesuka hati nanti.",
-                      icon: Icons.brush_rounded,
-                      colorAccent: Colors.pinkAccent,
-                      photoCountBadge: "Fix 3 Foto",
-                      onTap: () => _selectCustomFrame(context),
-                    ),
-                  ),
-                ],
-              ),
+                      MaterialPageRoute(builder: (context) => StaticFrameTemplatePage()), 
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 30),
+
+                // --- TOMBOL 2: DIY FRAME (Pakai btn.png + Font Pixeland) ---
+                ImageButton(
+                  text: "DIY Frame",
+                  onTap: () {
+                    // Set Provider: Custom Mode
+                    Provider.of<PhotoProvider>(context, listen: false).setFrameMode(
+                      FrameMode.custom,
+                      photoCount: 3, 
+                    );
+                    
+                    // Langsung ke Camera Page
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const CameraPage()),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 60),
+
+                // TOMBOL BACK
+
+              ],
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  // WIDGET CARD (Masih sama dengan desain modern sebelumnya)
-  Widget _buildSelectionCard(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required String description,
-    required IconData icon,
-    required Color colorAccent,
-    required String photoCountBadge,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(25),
-        splashColor: colorAccent.withOpacity(0.3),
-        hoverColor: colorAccent.withOpacity(0.1),
-        child: Container(
-          height: 500,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(25),
-            border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(30),
-                decoration: BoxDecoration(
-                  color: colorAccent.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: colorAccent.withOpacity(0.4),
-                      blurRadius: 30,
-                      spreadRadius: 5,
-                    )
-                  ],
-                ),
-                child: Icon(icon, size: 80, color: Colors.white),
-              ),
-              const SizedBox(height: 40),
-              Text(
-                title,
+// =========================================================
+// WIDGET BARU: IMAGE BUTTON (Pakai btn.png)
+// =========================================================
+class ImageButton extends StatefulWidget {
+  final String text;
+  final VoidCallback onTap;
+
+  const ImageButton({
+    super.key,
+    required this.text,
+    required this.onTap,
+  });
+
+  @override
+  State<ImageButton> createState() => _ImageButtonState();
+}
+
+class _ImageButtonState extends State<ImageButton> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: Transform.scale(
+        scale: _isPressed ? 0.95 : 1.0, // Efek mengecil saat ditekan
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 1. GAMBAR TOMBOL (btn.png)
+            Image.asset(
+              "assets/images/btn.png", 
+              width: 320, // Sesuaikan lebar tombol
+              height: 90, // Sesuaikan tinggi tombol
+              fit: BoxFit.contain, // Agar gambar tidak gepeng
+            ),
+
+            // 2. TEKS DI ATASNYA (Font Pixeland)
+            // Menggunakan Padding bottom sedikit karena biasanya tombol pixel ada efek 3D di bawah
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0), 
+              child: Text(
+                widget.text,
                 style: const TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 32,
+                  fontFamily: 'ambitsek', // <--- FONT BARU
+                  fontSize: 25, // Sesuaikan ukuran font pixeland (biasanya butuh lebih besar)
+                  color: Color.fromARGB(255, 255, 255, 255), // Sesuaikan dengan warna btn.png (biasanya teks hitam/putih)
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
                   letterSpacing: 1.5,
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  color: colorAccent,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                width: 60,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white54,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: Text(
-                  description,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 16,
-                    color: Colors.white70,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              Container(
-                margin: const EdgeInsets.only(bottom: 30),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                decoration: BoxDecoration(
-                  color: colorAccent,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  photoCountBadge,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              )
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
 
-  // --- LOGIKA NAVIGASI BARU ---
+// =========================================================
+// WIDGET: OUTLINED TEXT (Helper untuk Judul)
+// =========================================================
+class OutlinedText extends StatelessWidget {
+  final String text;
+  final String fontFamily;
+  final double fontSize;
+  final Color textColor;
+  final Color outlineColor;
+  final FontWeight fontWeight;
+  final double letterSpacing;
+  final bool hasShadow;
 
-  void _selectStaticFrame(BuildContext context) {
-    // REVISI: Tidak langsung set provider & payment.
-    // Tapi masuk ke halaman pemilihan template dulu.
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => StaticFrameTemplatePage()),
-    );
-  }
+  const OutlinedText({
+    super.key,
+    required this.text,
+    required this.fontFamily,
+    required this.fontSize,
+    required this.textColor,
+    required this.outlineColor,
+    this.fontWeight = FontWeight.normal,
+    this.letterSpacing = 0.0,
+    this.hasShadow = false,
+  });
 
-  void _selectCustomFrame(BuildContext context) {
-    // Custom mode masih sama, langsung set 3 foto dan ke payment
-    Provider.of<PhotoProvider>(context, listen: false).setFrameMode(
-      FrameMode.custom,
-      photoCount: 4,
-    );
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const PaymentPage()),
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        if (hasShadow)
+          Positioned(
+            top: 4, left: 4,
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,
+                color: Colors.black.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+        Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,
+            foreground: Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = outlineColor,
+          ),
+        ),
+        Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,
+            color: textColor,
+          ),
+        ),
+      ],
     );
   }
 }
