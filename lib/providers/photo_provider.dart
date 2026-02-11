@@ -1,14 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart'; // WAJIB ADA: Tambahkan path_provider di pubspec.yaml
 
 // ==========================================
-// 1. ENUMS (DEFINISI TIPE DATA)
+// 1. ENUMS
 // ==========================================
 enum PhotoFilter { none, vintage, grayscale, smooth, brightness }
 enum FrameShape { rectangle, circle, love }
 enum FrameMode { static, custom }
-enum CustomLayout { vertical, grid } // Pilihan Layout untuk Mode Custom
+enum CustomLayout { vertical, grid } 
 
 // ==========================================
 // 2. DATA MODELS
@@ -73,21 +75,22 @@ class PhotoProvider extends ChangeNotifier {
     final seconds = (_remainingTime % 60).toString().padLeft(2, '0');
     return "$minutes:$seconds";
   }
-// === TAMBAHKAN KODE INI ===
+
   String _sessionUuid = ''; 
-  
   String get sessionUuid => _sessionUuid;
 
   void setSessionUuid(String uuid) {
     _sessionUuid = uuid;
     notifyListeners();
   }
-void removePhotoAt(int index) {
-  if (index >= 0 && index < _photos.length) {
-    _photos.removeAt(index);
-    notifyListeners();
+
+  void removePhotoAt(int index) {
+    if (index >= 0 && index < _photos.length) {
+      _photos.removeAt(index);
+      notifyListeners();
+    }
   }
-}
+
   void startSession() {
     reset(); 
     _remainingTime = 320; 
@@ -110,13 +113,14 @@ void removePhotoAt(int index) {
     _isSessionActive = false;
     notifyListeners();
   }
-  Uint8List? _finalImageBytes;
-Uint8List? get finalImageBytes => _finalImageBytes;
 
-void setFinalImageBytes(Uint8List bytes) {
-  _finalImageBytes = bytes;
-  notifyListeners();
-}
+  Uint8List? _finalImageBytes;
+  Uint8List? get finalImageBytes => _finalImageBytes;
+
+  void setFinalImageBytes(Uint8List bytes) {
+    _finalImageBytes = bytes;
+    notifyListeners();
+  }
 
   // --- B. FRAME CONFIGURATION STATE ---
   FrameMode _selectedMode = FrameMode.static;
@@ -125,25 +129,34 @@ void setFinalImageBytes(Uint8List bytes) {
   String? _selectedFrameAsset;
   FrameLayout _selectedLayout = const FrameLayout();
 
-  // Getters
+  double? _selectedFrameWidth;
+  double? _selectedFrameHeight;
+
   FrameMode get selectedMode => _selectedMode;
   CustomLayout get customLayout => _customLayout;
   int get targetPhotoCount => _targetPhotoCount;
   String? get selectedFrameAsset => _selectedFrameAsset;
   FrameLayout get selectedLayout => _selectedLayout;
+  
+  double get selectedFrameWidth => _selectedFrameWidth ?? 344.0;
+  double get selectedFrameHeight => _selectedFrameHeight ?? 515.0;
 
-  // Setters
-  void setFrameMode(FrameMode mode, {
+  void setFrameMode(
+    FrameMode mode, {
     int photoCount = 3, 
     String? frameAsset,
     FrameLayout? layout,
+    double? customWidth,
+    double? customHeight,
   }) {
     _selectedMode = mode;
     _selectedFrameAsset = frameAsset;
     _selectedLayout = layout ?? const FrameLayout();
+    _selectedFrameWidth = customWidth;
+    _selectedFrameHeight = customHeight;
 
     if (mode == FrameMode.custom) {
-      _targetPhotoCount = 4; // Force 4 foto untuk custom
+      _targetPhotoCount = 4; 
     } else {
       _targetPhotoCount = photoCount;
     }
@@ -186,13 +199,10 @@ void setFinalImageBytes(Uint8List bytes) {
   }
 
   // --- D. CUSTOMIZATION STATE ---
-  
-  // Frame Utama (Warna di belakang foto individual)
   Color _frameColor = Colors.blue;
   String? _frameTexture;
   FrameShape _frameShape = FrameShape.rectangle;
   
-  // Container Frame (Warna latar belakang kertas keseluruhan) -> INI YANG TADI HILANG
   Color _frameContainerColor = Colors.white;
   String? _frameContainerTexture;
 
@@ -203,12 +213,10 @@ void setFinalImageBytes(Uint8List bytes) {
   double _textRotation = 0;
   Offset _textPosition = const Offset(0, 0);
 
-  // Getters
   Color get frameColor => _frameColor;
   String? get frameTexture => _frameTexture;
   FrameShape get frameShape => _frameShape;
   
-  // Getter yang tadi error:
   Color get frameContainerColor => _frameContainerColor;
   String? get frameContainerTexture => _frameContainerTexture;
 
@@ -218,7 +226,6 @@ void setFinalImageBytes(Uint8List bytes) {
   double get textRotation => _textRotation;
   Offset get textPosition => _textPosition;
 
-  // Setters Background
   void setFrameColor(Color color) {
     _frameColor = color;
     _frameTexture = null; 
@@ -230,7 +237,6 @@ void setFinalImageBytes(Uint8List bytes) {
     notifyListeners();
   }
 
-  // Setters Container (Background Kertas)
   void setFrameContainerColor(Color color) {
     _frameContainerColor = color;
     _frameContainerTexture = null;
@@ -247,7 +253,6 @@ void setFinalImageBytes(Uint8List bytes) {
     notifyListeners();
   }
 
-  // Sticker Logic
   void addSticker(String assetPath) {
     _stickers.add(StickerData(assetPath: assetPath));
     notifyListeners();
@@ -281,7 +286,6 @@ void setFinalImageBytes(Uint8List bytes) {
     }
   }
 
-  // Text Logic
   void setHeadlineText(String text) {
     _headlineText = text;
     notifyListeners();
@@ -302,23 +306,77 @@ void setFinalImageBytes(Uint8List bytes) {
     notifyListeners();
   }
 
-  // --- E. RESET & DISPOSE ---
+  // ==========================================
+  // E. FITUR BARU: SAVE PHOTOS LOCALLY (INI YANG BIKIN ERROR)
+  // ==========================================
+  Future<String> savePhotosLocally(String userEmail, Uint8List? finalStripBytes) async {
+    try {
+      // 1. Lokasi Folder: Documents/Photobooth_Backup/Tanggal/SessionID
+      final directory = await getApplicationDocumentsDirectory();
+      final dateStr = DateTime.now().toString().split(' ')[0];
+      final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
+      
+      final sessionFolder = Directory('${directory.path}/Photobooth_Backup/$dateStr/$sessionId');
+      
+      if (!await sessionFolder.exists()) {
+        await sessionFolder.create(recursive: true);
+      }
+
+      // 2. SIMPAN FOTO MENTAH (Tetap perlu untuk backup)
+      for (int i = 0; i < _photos.length; i++) {
+        final file = File('${sessionFolder.path}/raw_photo_$i.jpg');
+        await file.writeAsBytes(_photos[i].imageData);
+      }
+
+      // 3. SIMPAN FOTO STRIP / FINAL (PENTING BUAT EMAIL)
+      if (finalStripBytes != null) {
+        final stripFile = File('${sessionFolder.path}/final_strip_result.png');
+        await stripFile.writeAsBytes(finalStripBytes);
+        print("✅ Final Strip Tersimpan!");
+      } else {
+        print("⚠️ Peringatan: Final Strip belum ada/belum dirender");
+      }
+
+      // 4. Catat Log CSV
+      final logFile = File('${directory.path}/Photobooth_Backup/$dateStr/data_pengunjung.csv');
+      // Kolom: SessionID, Email, PathFolder, Status
+      final csvLine = '$sessionId,$userEmail,${sessionFolder.path},PENDING\n';
+      await logFile.writeAsString(csvLine, mode: FileMode.append);
+
+      return sessionFolder.path;
+
+    } catch (e) {
+      print("❌ Gagal Simpan Lokal: $e");
+      return "";
+    }
+  }
+
+  // ==========================================
+  // F. RESET & DISPOSE
+  // ==========================================
   
   void reset() {
+    print("🧹 RESET SESSION: Membersihkan memori foto...");
+
     _photos.clear();
+    _finalImageBytes = null; // FIX: Agar email tidak kirim foto lama
+
     _selectedFilter = PhotoFilter.none;
+    _isSessionActive = false;
+    _sessionTimer?.cancel();
     
-    // Reset Customization
     _frameColor = Colors.blue;
     _frameTexture = null;
-    _frameContainerColor = Colors.white; // Reset Container Color
-    _frameContainerTexture = null;       // Reset Container Texture
+    _frameContainerColor = Colors.white; 
+    _frameContainerTexture = null;       
     _frameShape = FrameShape.rectangle;
     _stickers.clear();
     _headlineText = '';
     _textSize = 28;
     _textRotation = 0;
     _textPosition = const Offset(0, 0);
+    _selectedFrameWidth = null;
+    _selectedFrameHeight = null;
     
     notifyListeners();
   }

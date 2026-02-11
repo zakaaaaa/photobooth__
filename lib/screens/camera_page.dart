@@ -1,14 +1,13 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_mjpeg/flutter_mjpeg.dart';
+import 'package:camera/camera.dart'; // [GANTI KE PLUGIN CAMERA RESMI]
 import 'package:provider/provider.dart';
 import '../providers/photo_provider.dart';
 import 'customization_page.dart';
 import 'preview_print_page.dart';
 import '../utils/image_filter.dart';
-import '../services/http_camera_service.dart';
-import '../services/api_service.dart'; 
+import '../services/api_service.dart';
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -18,22 +17,21 @@ class CameraPage extends StatefulWidget {
 }
 
 class _CameraPageState extends State<CameraPage> {
-  final HttpCameraService _cameraService = HttpCameraService();
-  
+  // --- CONTROLLER KAMERA BARU (PENGGANTI DCC) ---
+  CameraController? _cameraController;
+  bool _isCameraInitialized = false;
+
+  // Logic Sesi
   bool _isSessionActive = false;
-  bool _isCapturing = false;    
+  bool _isCapturing = false;
   int _countdown = 0;
   bool _showBlink = false;
-  
+
   // Batas Retake
   int _retakeCount = 0;
   final int _maxRetakes = 2;
 
-  // Stream Key
-  Key _streamKey = UniqueKey();
-  bool _isStreamActive = true;
-
-  // --- MATRIKS FILTER ---
+  // --- MATRIKS FILTER (TETAP SAMA) ---
   static const ColorFilter _sepiaMatrix = ColorFilter.matrix(<double>[
     0.393, 0.769, 0.189, 0, 0,
     0.349, 0.686, 0.168, 0, 0,
@@ -66,12 +64,75 @@ class _CameraPageState extends State<CameraPage> {
   @override
   void initState() {
     super.initState();
-    _initService();
+    _initSonyCamera(); // Inisialisasi Kamera Sony
   }
 
-  Future<void> _initService() async {
-    await _cameraService.initialize();
-    if (mounted) setState(() {});
+  @override
+  void dispose() {
+    _cameraController?.dispose();
+    super.dispose();
+  }
+
+  // =================================================================
+  // LOGIC BARU: CARI KAMERA SONY & CONNECT
+  // =================================================================
+  Future<void> _initSonyCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        debugPrint("❌ Tidak ada kamera terdeteksi!");
+        return;
+      }
+
+      CameraDescription? selectedCamera;
+
+      debugPrint("📸 Scanning Cameras...");
+      
+      // Cari kamera yang namanya mengandung "USB Video", "ZV-E10", atau "USB Camera"
+      // PENTING: Hindari "Imaging Edge" agar tidak layar biru
+      for (var cam in cameras) {
+        debugPrint("   Found: ${cam.name}");
+        
+        // Skip driver lama yang bermasalah
+        if (cam.name.toLowerCase().contains("imaging edge")) {
+           continue; 
+        }
+
+        // Prioritaskan Kamera USB Streaming
+        if (cam.name.toLowerCase().contains("usb video") || 
+            cam.name.toLowerCase().contains("zv-e10") ||
+            cam.name.toLowerCase().contains("usb camera") ||
+            cam.lensDirection == CameraLensDirection.external) {
+          
+          selectedCamera = cam;
+          break;
+        }
+      }
+
+      // Fallback 1: Jika tidak ketemu nama spesifik, ambil kamera index 1 (biasanya eksternal)
+      if (selectedCamera == null && cameras.length > 1) {
+        selectedCamera = cameras[1];
+      }
+      
+      // Fallback 2: Pakai kamera apa saja yang ada (Webcam laptop)
+      selectedCamera ??= cameras.first;
+
+      debugPrint("✅ Using Camera: ${selectedCamera.name}");
+
+      _cameraController = CameraController(
+        selectedCamera,
+        ResolutionPreset.max, // Resolusi Maksimal Webcam (Biasanya 720p/1080p)
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+
+      await _cameraController!.initialize();
+      if (mounted) {
+        setState(() => _isCameraInitialized = true);
+      }
+    } catch (e) {
+      debugPrint("❌ Error Init Camera: $e");
+    }
   }
 
   ColorFilter _getLiveFilterMatrix(PhotoFilter filter) {
@@ -96,36 +157,29 @@ class _CameraPageState extends State<CameraPage> {
 
     // 1. GENERATE UUID & RESET
     String newUuid = "sesi-${DateTime.now().millisecondsSinceEpoch}";
-    provider.setSessionUuid(newUuid); 
-    provider.reset(); 
+    provider.setSessionUuid(newUuid);
+    provider.reset();
     provider.setSelectedFilter(userSelectedFilter);
 
     // 2. KIRIM KE SERVER
     try {
        final apiService = Provider.of<ApiService>(context, listen: false);
        await apiService.startSession(newUuid);
-    } catch (e) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Warning: Server not connected")));
-    }
+    } catch (_) {}
 
     setState(() => _isSessionActive = true);
 
     // 3. Loop Otomatis
     while (provider.photos.length < provider.targetPhotoCount) {
       if (!mounted) break;
-      
       if (provider.photos.isNotEmpty) {
         await Future.delayed(const Duration(seconds: 2));
       }
-
       await _performSingleCapture();
-      
       if (!mounted || !_isSessionActive) break;
     }
 
-    if (mounted) {
-       setState(() => _isSessionActive = false);
-    }
+    if (mounted) setState(() => _isSessionActive = false);
   }
 
   void _retakeSpecificPhoto(int index) async {
@@ -136,11 +190,11 @@ class _CameraPageState extends State<CameraPage> {
     if (_isSessionActive || _isCapturing) return;
 
     final provider = Provider.of<PhotoProvider>(context, listen: false);
-    provider.removePhotoAt(index); 
-    
+    provider.removePhotoAt(index);
+
     setState(() {
       _retakeCount++;
-      _isSessionActive = true; 
+      _isSessionActive = true;
     });
 
     await _performSingleCapture();
@@ -168,22 +222,22 @@ class _CameraPageState extends State<CameraPage> {
 
     // CAPTURE
     await _takePictureAndSave();
-    
     setState(() => _isCapturing = false);
   }
 
   Future<void> _takePictureAndSave() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
+
     try {
-      setState(() => _isStreamActive = false);
-
-      final File? imageFile = await _cameraService.takePicture();
-      if (imageFile == null) throw Exception('Gagal mengambil foto');
-
-      final rawBytes = await imageFile.readAsBytes();
+      // 1. AMBIL FOTO LANGSUNG DARI WEBCAM STREAM
+      final XFile image = await _cameraController!.takePicture();
+      
+      final rawBytes = await image.readAsBytes();
 
       if (!mounted) return;
       final provider = Provider.of<PhotoProvider>(context, listen: false);
-      
+
+      // 2. Apply Filter
       final filteredBytes = await ImageFilterUtil.applyFilter(
         rawBytes,
         provider.selectedFilter,
@@ -191,35 +245,19 @@ class _CameraPageState extends State<CameraPage> {
 
       provider.addPhoto(filteredBytes);
 
-      // UPLOAD
+      // 3. Upload Background (Opsional)
       try {
         final apiService = Provider.of<ApiService>(context, listen: false);
-        await apiService.uploadPhoto(provider.sessionUuid, imageFile.path);
+        await apiService.uploadPhoto(provider.sessionUuid, image.path);
       } catch (e) {
         debugPrint("❌ Gagal Upload: $e");
       }
 
-      try { await imageFile.delete(); } catch (_) {}
-
-      await _cameraService.startLiveView();
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (mounted) {
-        setState(() {
-          _isStreamActive = true;
-          _streamKey = UniqueKey(); 
-        });
-      }
+      // Hapus file temp
+      try { await File(image.path).delete(); } catch (_) {}
 
     } catch (e) {
       debugPrint('Error Capture: $e');
-      await _cameraService.startLiveView();
-      if (mounted) {
-        setState(() {
-          _isStreamActive = true;
-          _streamKey = UniqueKey(); 
-        });
-      }
     }
   }
 
@@ -248,7 +286,6 @@ class _CameraPageState extends State<CameraPage> {
     final provider = context.watch<PhotoProvider>();
     final selectedFilter = provider.selectedFilter;
 
-    // LOGIKA BACK BUTTON: Hilang jika sesi aktif ATAU sudah ada foto
     final bool showBackButton = !_isSessionActive && provider.photos.isEmpty;
 
     return Scaffold(
@@ -257,29 +294,45 @@ class _CameraPageState extends State<CameraPage> {
         fit: StackFit.expand,
         children: [
           // ------------------------------------------
-          // LAYER 1: KAMERA (FULLSCREEN)
+          // LAYER 1: SONY WEBCAM PREVIEW (FULLSCREEN)
           // ------------------------------------------
-          _isStreamActive
-              ? ColorFiltered(
-                  colorFilter: _getLiveFilterMatrix(selectedFilter),
-                  child: Mjpeg(
-                    key: _streamKey,
-                    isLive: true,
-                    stream: _cameraService.liveViewUrl,
-                    fit: BoxFit.cover,
-                    error: (context, error, stack) => const Center(child: Text("Connecting Camera...", style: TextStyle(color: Colors.white))),
-                    loading: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
-                  ),
-                )
-              : Container(color: Colors.black, child: const Center(child: CircularProgressIndicator())),
+          if (_isCameraInitialized && _cameraController != null)
+             // Trik agar Fullscreen (Cover) tidak gepeng
+             SizedBox.expand(
+               child: FittedBox(
+                 fit: BoxFit.cover,
+                 child: SizedBox(
+                   width: _cameraController!.value.previewSize?.width ?? 1280,
+                   height: _cameraController!.value.previewSize?.height ?? 720,
+                   // Bungkus dengan ColorFiltered agar filter live tetap jalan
+                   child: ColorFiltered(
+                     colorFilter: _getLiveFilterMatrix(selectedFilter),
+                     child: CameraPreview(_cameraController!),
+                   ),
+                 ),
+               ),
+             )
+          else
+            const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 10),
+                  Text("Menghubungkan Kamera Sony...", style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
 
           // ------------------------------------------
           // LAYER 1.5: OVERLAY IMAGE (FRAME UI)
           // ------------------------------------------
           Positioned.fill(
-            child: Image.asset(
-              "assets/images/cam_ovl.png",
-              fit: BoxFit.cover,
+            child: IgnorePointer(
+              child: Image.asset(
+                "assets/images/cam_ovl.png",
+                fit: BoxFit.cover,
+              ),
             ),
           ),
 
@@ -288,7 +341,7 @@ class _CameraPageState extends State<CameraPage> {
           // ------------------------------------------
           if (_countdown > 0)
             Container(
-              color: Colors.black.withValues(alpha: 0.4),
+              color: Colors.black.withOpacity(0.4),
               child: Center(
                 child: Text(
                   '$_countdown',
@@ -298,10 +351,10 @@ class _CameraPageState extends State<CameraPage> {
                     fontWeight: FontWeight.bold, 
                     color: Colors.white, 
                     shadows: [
-                       Shadow(offset: Offset(-4, -4), color: Colors.black),
-                       Shadow(offset: Offset(4, -4), color: Colors.black),
-                       Shadow(offset: Offset(4, 4), color: Colors.black),
-                       Shadow(offset: Offset(-4, 4), color: Colors.black),
+                      Shadow(offset: Offset(-4, -4), color: Colors.black),
+                      Shadow(offset: Offset(4, -4), color: Colors.black),
+                      Shadow(offset: Offset(4, 4), color: Colors.black),
+                      Shadow(offset: Offset(-4, 4), color: Colors.black),
                     ]
                   ),
                 ),
@@ -319,8 +372,11 @@ class _CameraPageState extends State<CameraPage> {
             bottom: 20,
             child: Container(
               width: 140,
-              color: Colors.black.withValues(alpha: 0.5), 
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 10),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(15),
+              ),
               child: Column(
                 children: [
                   const Text(
@@ -334,6 +390,8 @@ class _CameraPageState extends State<CameraPage> {
                     )
                   ),
                   const SizedBox(height: 15),
+                  
+                  // LIST FOTO
                   Expanded(
                     child: ListView.separated(
                       itemCount: provider.targetPhotoCount,
@@ -366,7 +424,10 @@ class _CameraPageState extends State<CameraPage> {
                                   right: 0, bottom: 0,
                                   child: Container(
                                     padding: const EdgeInsets.all(6),
-                                    decoration: const BoxDecoration(color: Colors.red, borderRadius: BorderRadius.only(topLeft: Radius.circular(10))),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red, 
+                                      borderRadius: BorderRadius.only(topLeft: Radius.circular(10), bottomRight: Radius.circular(8))
+                                    ),
                                     child: const Icon(Icons.refresh, size: 18, color: Colors.white),
                                   ),
                                 )
@@ -388,7 +449,7 @@ class _CameraPageState extends State<CameraPage> {
           ),
 
           // ------------------------------------------
-          // LAYER 4: BOTTOM CONTROLS (FILTER & START/NEXT)
+          // LAYER 4: BOTTOM CONTROLS
           // ------------------------------------------
           Positioned(
             left: 0, 
@@ -398,7 +459,7 @@ class _CameraPageState extends State<CameraPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 
-                // FILTER LIST (Hanya muncul jika belum Start)
+                // FILTER LIST
                 Visibility(
                   visible: !_isSessionActive, 
                   child: Center(
@@ -418,8 +479,12 @@ class _CameraPageState extends State<CameraPage> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(color: isSelected ? Colors.yellowAccent : Colors.white, width: 3),
-                                image: assetPath != null ? DecorationImage(image: AssetImage(assetPath), fit: BoxFit.cover) : null,
-                                boxShadow: isSelected ? [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 10)] : [],
+                                image: assetPath != null 
+                                  ? DecorationImage(image: AssetImage(assetPath), fit: BoxFit.cover) 
+                                  : null,
+                                boxShadow: isSelected 
+                                  ? [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10)] 
+                                  : [],
                               ),
                               child: assetPath == null ? const Icon(Icons.block, color: Colors.white) : null,
                             ),
@@ -432,25 +497,24 @@ class _CameraPageState extends State<CameraPage> {
                 
                 const SizedBox(height: 30),
 
-                // TOMBOL START (BALIK KE ICON FLUTTER)
+                // TOMBOL START
                 if (!_isSessionActive && !provider.isComplete)
                   GestureDetector(
                     onTap: _startAutoSession,
                     child: Container(
                       width: 90, height: 90,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 5),
                       ),
                       child: const Center(
-                        // [KEMBALI KE ICON DEFAULT]
                         child: Icon(Icons.camera_alt, color: Colors.white, size: 45),
                       ),
                     ),
                   ),
 
-                // TOMBOL NEXT (Custom Image Button)
+                // TOMBOL NEXT
                 if (provider.isComplete && !_isSessionActive)
                   NextImageButton(
                     onPressed: _onNextPressed,
@@ -460,9 +524,8 @@ class _CameraPageState extends State<CameraPage> {
           ),
 
           // ------------------------------------------
-          // LAYER 5: BACK BUTTON (POJOK KIRI ATAS)
+          // LAYER 5: BACK BUTTON
           // ------------------------------------------
-          // Menggunakan Path yang sudah diperbaiki
           if (showBackButton)
             Positioned(
               top: 50,
@@ -470,7 +533,7 @@ class _CameraPageState extends State<CameraPage> {
               child: GestureDetector(
                 onTap: () => Navigator.pop(context),
                 child: Image.asset(
-                  "assets/images/back_cam.png", // [PATH SUDAH BENAR]
+                  "assets/images/back_cam.png", 
                   width: 150, 
                   fit: BoxFit.contain,
                 ),
@@ -482,9 +545,7 @@ class _CameraPageState extends State<CameraPage> {
   }
 }
 
-// =========================================================
-// WIDGET: NEXT IMAGE BUTTON (Hover & Click Animation)
-// =========================================================
+// Widget NextImageButton TETAP SAMA seperti kode Anda
 class NextImageButton extends StatefulWidget {
   final VoidCallback onPressed;
   const NextImageButton({super.key, required this.onPressed});
@@ -515,7 +576,7 @@ class _NextImageButtonState extends State<NextImageButton> {
           duration: const Duration(milliseconds: 100),
           child: Image.asset(
             "assets/images/next.png", 
-            width: 180, // [SIZE UPDATED]
+            width: 180, 
             height: 96, 
             fit: BoxFit.contain,
           ),

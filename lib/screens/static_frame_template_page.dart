@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/photo_provider.dart';
-import 'camera_page.dart'; // <--- 1. IMPORT CAMERA PAGE (BUKAN PAYMENT)
+import 'camera_page.dart'; 
 
 // Model Data Frame
 class FrameTemplate {
@@ -9,12 +9,19 @@ class FrameTemplate {
   final String assetPath;
   final int photoCount;
   final FrameLayout layout;
+  
+  // Property ukuran output (Resolusi hasil akhir)
+  final double outputWidth;
+  final double outputHeight;
 
   FrameTemplate({
     required this.id,
     required this.assetPath,
     required this.photoCount,
     required this.layout,
+    // Default ukuran Strip kecil jika tidak diisi
+    this.outputWidth = 344.0, 
+    this.outputHeight = 515.0,
   });
 }
 
@@ -23,6 +30,7 @@ class StaticFrameTemplatePage extends StatelessWidget {
 
   // DATA TEMPLATES
   final List<FrameTemplate> templates = [
+    // FRAME 1 (Strip)
     FrameTemplate(
       id: 'frame_1',
       assetPath: 'assets/frames/frame_01.png', 
@@ -37,6 +45,7 @@ class StaticFrameTemplatePage extends StatelessWidget {
         childAspectRatio: 1.2,
       ),
     ),
+    // FRAME 2 (Strip)
     FrameTemplate(
       id: 'frame_2',
       assetPath: 'assets/frames/frame_02.png', 
@@ -51,6 +60,7 @@ class StaticFrameTemplatePage extends StatelessWidget {
         childAspectRatio: 1.0,
       ),
     ),
+    // FRAME 3 (Strip)
     FrameTemplate(
       id: 'frame_3',
       assetPath: 'assets/frames/frame_03.png', 
@@ -65,18 +75,22 @@ class StaticFrameTemplatePage extends StatelessWidget {
         childAspectRatio: 1.2,
       ),
     ),
+    
+    // ===============================================
+    // FRAME 4 (TAROT) - UKURAN BESAR 1080x1920
+    // ===============================================
     FrameTemplate(
       id: 'frame_4',
       assetPath: 'assets/frames/frame_04.png', 
-      photoCount: 3, 
+      photoCount: 4, 
       layout: const FrameLayout(
-        topPadding: 120,
-        bottomPadding: 120,
-        leftPadding: 40,
-        rightPadding: 40,
-        horizontalSpacing: 30,
-        verticalSpacing: 15,
-        childAspectRatio: 1.2,
+        topPadding: 35,
+        leftPadding: 10,
+        rightPadding: 5,
+        bottomPadding: 40,
+        horizontalSpacing: 5,
+        verticalSpacing: 13,
+        childAspectRatio: 1.0,
       ),
     ),
   ];
@@ -121,14 +135,13 @@ class StaticFrameTemplatePage extends StatelessWidget {
                   child: GridView.builder(
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 4, 
-                      crossAxisSpacing: 20, // Jarak antar kartu horizontal
-                      mainAxisSpacing: 20,  // Jarak antar kartu vertikal
-                      childAspectRatio: 0.7, 
+                      crossAxisSpacing: 20, 
+                      mainAxisSpacing: 20, 
+                      childAspectRatio: 0.55, // Rasio kartu di menu (agar terlihat memanjang)
                     ),
                     itemCount: templates.length,
                     itemBuilder: (context, index) {
                       final template = templates[index];
-                      // PANGGIL WIDGET CARD BARU
                       return RetroFrameCard(template: template);
                     },
                   ),
@@ -156,7 +169,7 @@ class StaticFrameTemplatePage extends StatelessWidget {
 }
 
 // =========================================================
-// WIDGET BARU: RETRO FRAME CARD (Dengan Animasi Klik)
+// WIDGET BARU: RETRO FRAME CARD
 // =========================================================
 class RetroFrameCard extends StatefulWidget {
   final FrameTemplate template;
@@ -174,13 +187,11 @@ class _RetroFrameCardState extends State<RetroFrameCard> {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      // Logic Hover (Untuk PC/Kiosk dengan Mouse)
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
       
       child: GestureDetector(
-        // Logic Klik (Tekan = Kecilkan)
         onTapDown: (_) => setState(() => _isPressed = true),
         onTapUp: (_) {
           setState(() => _isPressed = false);
@@ -189,19 +200,14 @@ class _RetroFrameCardState extends State<RetroFrameCard> {
         onTapCancel: () => setState(() => _isPressed = false),
         
         child: AnimatedScale(
-          // ANIMASI SCALE:
-          // Jika ditekan: 0.95 (Mengecil)
-          // Jika di-hover (tapi tidak ditekan): 1.05 (Membesar dikit)
-          // Normal: 1.0
           scale: _isPressed ? 0.95 : (_isHovered ? 1.02 : 1.0),
-          duration: const Duration(milliseconds: 100), // Durasi animasi cepat (Snappy)
+          duration: const Duration(milliseconds: 100),
           curve: Curves.easeInOut,
           
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFFC0C0C0), // Warna Abu-abu Windows 95
+              color: const Color(0xFFC0C0C0), 
               border: Border.all(width: 3, color: Colors.black),
-              // Shadow hilang saat ditekan (Efek tombol fisik masuk ke dalam)
               boxShadow: _isPressed 
                   ? [] 
                   : [BoxShadow(color: Colors.black.withValues(alpha: 0.6), offset: const Offset(6, 6), blurRadius: 0)],
@@ -225,13 +231,13 @@ class _RetroFrameCardState extends State<RetroFrameCard> {
                   ),
                 ),
 
-                // GAMBAR FRAME
+                // GAMBAR FRAME (PREVIEW KECIL)
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.all(15.0),
+                    padding: const EdgeInsets.all(10.0),
                     child: Image.asset(
                       widget.template.assetPath,
-                      fit: BoxFit.contain,
+                      fit: BoxFit.contain, // Agar seluruh frame terlihat dalam kartu
                       errorBuilder: (context, error, stackTrace) {
                         return const Center(child: Icon(Icons.broken_image, size: 40, color: Colors.grey));
                       },
@@ -247,15 +253,18 @@ class _RetroFrameCardState extends State<RetroFrameCard> {
   }
 
   void _handleSelection() {
-    // 1. Simpan Data ke Provider
+    // 1. Simpan Data ke Provider (TERMASUK UKURAN 1080x1920)
     Provider.of<PhotoProvider>(context, listen: false).setFrameMode(
       FrameMode.static,
       photoCount: widget.template.photoCount,
       frameAsset: widget.template.assetPath,
       layout: widget.template.layout,
+      // Kirim ukuran custom agar PreviewPage merender ukuran besar
+      customWidth: widget.template.outputWidth,
+      customHeight: widget.template.outputHeight,
     );
 
-    // 2. NAVIGASI KE CAMERA PAGE (Flow Revisi)
+    // 2. NAVIGASI KE CAMERA PAGE
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const CameraPage()),

@@ -14,7 +14,8 @@ dependencies:
   url_launcher: ^6.2.0  
   # Image processing
   image: ^4.1.7
-
+  camera: ^0.10.5+9
+  camera_windows: ^0.2.1+8
   process_run: ^1.1.0
   path_provider: ^2.1.0
   
@@ -22,10 +23,10 @@ dependencies:
   provider: ^6.1.2
   
   # Path
-  http: ^0.13.6        # Untuk kirim perintah capture
-  flutter_mjpeg: ^2.0.3 # Untuk menampilkan Live View dari HTTP
+
   path: ^1.9.0
   mailer: ^6.0.1
+
   
   # Color picker
   flutter_colorpicker: ^1.0.3
@@ -36,8 +37,6 @@ dependencies:
   
   # Permission
   permission_handler: ^11.3.1
-  camera: ^0.11.0
-  camera_windows: ^0.2.6+4
   device_info_plus: ^12.3.0
   qr_flutter: ^4.1.0
 

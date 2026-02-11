@@ -6,14 +6,16 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:image/image.dart' as img; // Import Library Image
+import 'package:path_provider/path_provider.dart'; // Import untuk akses folder Download
 
 import 'package:photobooth_app/providers/photo_provider.dart';
 import 'package:photobooth_app/screens/splash_screen.dart'; 
 import 'package:photobooth_app/services/api_service.dart';
+import 'package:photobooth_app/services/email_service.dart';
 
 // ==========================================
 // HALAMAN UTAMA: MENU PILIHAN PREVIEW
@@ -27,7 +29,7 @@ class PreviewPrintPage extends StatefulWidget {
 
 class _PreviewPrintPageState extends State<PreviewPrintPage> {
   
-  // [KONFIGURASI MANUAL] ATUR POSISI & UKURAN DI SINI
+  // [KONFIGURASI TATA LETAK]
   final double previewTextTopMargin = 105.0; 
   final double previewTextLeftMargin = 0.0;
   final double previewTextSize = 40.0; 
@@ -37,19 +39,33 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
   final double cardHeight = 270.0;
   final double cardSpacing = 20.0;
 
+  // CONTROLLER UNTUK FORM EMAIL
+  final TextEditingController _emailController = TextEditingController();
+  bool _isSendingEmail = false;
+  String _loadingText = "SEND";
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  // =========================================================
+  // FITUR 1: PRINT KE PRINTER
+  // =========================================================
   Future<void> _printPhoto(BuildContext context) async {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     
     if (provider.finalImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please wait, rendering photo...")),
+        const SnackBar(content: Text("Please wait, preparing photo...")),
       );
       return;
     }
 
     try {
       final doc = pw.Document();
-      // Epson SLD 500: 1205 x 1795 pixels (~300 DPI)
+      // Ukuran kertas disesuaikan (Contoh: 4R atau Custom Roll)
       final pdfFormat = PdfPageFormat(289.2, 430.8, marginAll: 0);
       final image = pw.MemoryImage(provider.finalImageBytes!);
 
@@ -69,15 +85,185 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
     }
   }
 
+  // =========================================================
+  // FITUR 2: DOWNLOAD FILE KE LAPTOP (FOLDER DOWNLOADS)
+  // =========================================================
+  Future<void> _downloadPhotoToLocal(BuildContext context) async {
+    final provider = Provider.of<PhotoProvider>(context, listen: false);
+    
+    // 1. Cek apakah foto sudah dirender
+    if (provider.finalImageBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please wait, preparing photo...")),
+      );
+      return;
+    }
+
+    try {
+      // 2. Cari Folder Downloads di Windows
+      Directory? downloadsDirectory;
+      if (Platform.isWindows) {
+        downloadsDirectory = await getDownloadsDirectory();
+      } else {
+        downloadsDirectory = await getApplicationDocumentsDirectory();
+      }
+
+      if (downloadsDirectory == null) return;
+
+      // 3. Buat Nama File Unik
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'Photobooth_Result_$timestamp.png';
+      final savePath = '${downloadsDirectory.path}/$fileName';
+
+      // 4. Tulis File ke Harddisk
+      final file = File(savePath);
+      await file.writeAsBytes(provider.finalImageBytes!);
+
+      // 5. Beri Notifikasi Sukses & Opsi Buka Folder
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("✅ Saved to Downloads: $fileName"),
+            backgroundColor: Colors.blueAccent,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'OPEN',
+              textColor: Colors.white,
+              onPressed: () {
+                // Perintah Windows untuk membuka file explorer
+                Process.run('explorer.exe', ['/select,', savePath]);
+              },
+            ),
+          ),
+        );
+      }
+
+    } catch (e) {
+      debugPrint("Download Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to save: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // =========================================================
+  // FITUR 3: GENERATE GIF (HIGH QUALITY & EMAIL FRIENDLY)
+  // =========================================================
+  Future<File?> _generateGifFile(List<Uint8List> photos) async {
+    try {
+      if (photos.isEmpty) return null;
+      debugPrint("🎬 Membuat GIF HQ...");
+
+      // 1. Decode Foto Pertama
+      img.Image? baseImage = img.decodeImage(photos[0]);
+      if (baseImage == null) return null;
+
+      // Resize: width 600px, Interpolasi Cubic (Tajam)
+      baseImage = img.copyResize(baseImage, width: 600, interpolation: img.Interpolation.cubic);
+      baseImage.frameDuration = 500; // 0.5 detik per frame
+
+      // 2. Tambah Frame Sisanya
+      for (int i = 1; i < photos.length; i++) {
+        img.Image? nextImage = img.decodeImage(photos[i]);
+        if (nextImage != null) {
+          nextImage = img.copyResize(nextImage, width: 600, interpolation: img.Interpolation.cubic);
+          nextImage.frameDuration = 500; 
+          baseImage.addFrame(nextImage);
+        }
+      }
+
+      // 3. Encode ke GIF
+      Uint8List gifBytes = img.encodeGif(baseImage);
+
+      final tempDir = Directory.systemTemp;
+      final File gifFile = File('${tempDir.path}/video_${DateTime.now().millisecondsSinceEpoch}.gif');
+      await gifFile.writeAsBytes(gifBytes);
+      
+      return gifFile;
+
+    } catch (e) {
+      debugPrint("Error generating GIF: $e");
+    }
+    return null;
+  }
+
+  // =========================================================
+  // FITUR 4: KIRIM EMAIL (SIMPAN LOKAL DULU AGAR CEPAT)
+  // =========================================================
+  Future<void> _handleSendEmail() async {
+    final email = _emailController.text.trim();
+    
+    // Validasi Email Sederhana
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a valid email address!")),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSendingEmail = true;
+      _loadingText = "SAVING..."; // Tampilkan status Saving
+    });
+
+    try {
+      final provider = Provider.of<PhotoProvider>(context, listen: false);
+      
+      // OPTIMASI: Simpan data ke harddisk dulu (Quick Mode)
+      // Pastikan Anda sudah menambahkan fungsi savePhotosLocally di PhotoProvider
+      // Jika belum, kode ini akan error. Jika error, hapus baris ini dan pakai logika lama.
+      await provider.savePhotosLocally(email, provider.finalImageBytes);
+      
+      if (!mounted) return;
+
+      // Beri Feedback Sukses
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Data Saved for $email! Email will be sent later."),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      _emailController.clear();
+      
+      // Delay sedikit agar user baca pesan sukses
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (!mounted) return;
+
+      // AUTO RESET & BALIK KE SPLASH SCREEN
+      provider.reset();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const SplashScreen()), 
+        (route) => false,
+      );
+
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() {
+        _isSendingEmail = false;
+        _loadingText = "SEND";
+      });
+    }
+  }
+
+  // =========================================================
+  // UI BUILDER UTAMA
+  // =========================================================
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<PhotoProvider>(context, listen: false);
-    final String qrUrl = "http://168.231.125.203/download/${provider.sessionUuid}"; 
-
     return Scaffold(
+      resizeToAvoidBottomInset: true, 
       body: Stack(
         fit: StackFit.expand,
         children: [
+          // BACKGROUND IMAGE
           Image.asset(
             'assets/images/splash_background.png',
             fit: BoxFit.cover,
@@ -88,6 +274,9 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ==========================
+                // BAGIAN KIRI: PREVIEW MENU
+                // ==========================
                 Expanded(
                   flex: 3, 
                   child: Column(
@@ -111,6 +300,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                         ),
                       ),
 
+                      // KARTU PILIHAN PREVIEW (PHOTO, GIF, VIDEO)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.start,
                         children: [
@@ -139,70 +329,169 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                       
                       const Spacer(),
 
+                      // ===========================================
+                      // BARIS TOMBOL AKSI: HOME, SAVE, PRINT
+                      // ===========================================
                       Row(
                         children: [
-                           RetroButton(
+                            // 1. TOMBOL HOME (RESET & EXIT)
+                            RetroButton(
                              icon: Icons.home,
                              label: "HOME",
                              color: Colors.redAccent,
                              onTap: () {
-                                Provider.of<PhotoProvider>(context, listen: false).reset();
-                                Navigator.of(context).pushAndRemoveUntil(
-                                  MaterialPageRoute(builder: (_) => const SplashScreen()), 
-                                  (route) => false,
-                                );
+                               // Reset Provider agar data bersih
+                               Provider.of<PhotoProvider>(context, listen: false).reset();
+                               // Navigasi paksa ke Splash Screen
+                               Navigator.of(context).pushAndRemoveUntil(
+                                 MaterialPageRoute(builder: (_) => const SplashScreen()), 
+                                 (route) => false,
+                               );
                              },
-                           ),
-                           
-                           const SizedBox(width: 20),
+                            ),
+                            
+                            const SizedBox(width: 20),
 
-                           RetroButton(
+                            // 2. TOMBOL SAVE (DOWNLOAD KE LOKAL) - BARU!
+                            RetroButton(
+                             icon: Icons.download,
+                             label: "SAVE",
+                             color: Colors.blue,
+                             onTap: () => _downloadPhotoToLocal(context),
+                            ),
+
+                            const SizedBox(width: 20),
+
+                            // 3. TOMBOL PRINT
+                            RetroButton(
                              icon: Icons.print,
-                             label: "PRINT NOW",
+                             label: "PRINT",
                              color: Colors.green,
                              onTap: () => _printPhoto(context),
-                           ),
+                            ),
                         ],
                       )
                     ],
                   ),
                 ),
 
+                // ==========================
+                // BAGIAN KANAN: EMAIL FORM (RETRO STYLE)
+                // ==========================
                 Expanded(
                   flex: 1,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const OutlinedText(
-                        text: "SCAN\nTHE\nQR CODE",
-                        fontFamily: 'Ambitsek',
-                        fontSize: 32,
-                        textColor: Color(0xFFFFED00),
-                        outlineColor: Color(0xFFEF7D30),
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 2.0,
-                        hasShadow: true,
-                      ),
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFC0C0C0), 
-                          border: Border.all(width: 4, color: Colors.black),
-                          boxShadow: const [BoxShadow(color: Colors.black54, offset: Offset(8, 8), blurRadius: 0)],
-                        ),
-                        child: Container(
-                          color: Colors.white, 
-                          padding: const EdgeInsets.all(5),
-                          child: QrImageView(
-                            data: qrUrl,
-                            version: QrVersions.auto,
-                            size: 180.0,
-                            backgroundColor: Colors.white,
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const OutlinedText(
+                            text: "SEND TO\nEMAIL",
+                            fontFamily: 'Ambitsek',
+                            fontSize: 32,
+                            textColor: Color(0xFFFFED00),
+                            outlineColor: Color(0xFFEF7D30),
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2.0,
+                            hasShadow: true,
                           ),
-                        ),
+                          const SizedBox(height: 20),
+                          
+                          // RETRO FORM CONTAINER
+                          Container(
+                            padding: const EdgeInsets.all(4), 
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFC0C0C0), // Silver Win95
+                              border: Border.all(width: 3, color: Colors.black),
+                              boxShadow: const [BoxShadow(color: Colors.black54, offset: Offset(8, 8), blurRadius: 0)],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // WINDOWS 95 TITLE BAR
+                                Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                                  color: const Color(0xFF000080), // Navy Blue
+                                  child: const Text(
+                                    "Message.exe",
+                                    style: TextStyle(
+                                      fontFamily: 'Ambitsek', 
+                                      color: Colors.white, 
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 15),
+                                
+                                // INPUT LABEL
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 10),
+                                  child: Text(
+                                    "Enter Recipient Email:",
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+
+                                // INPUT FIELD
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      border: Border(
+                                        top: BorderSide(color: Colors.grey[800]!, width: 2),
+                                        left: BorderSide(color: Colors.grey[800]!, width: 2),
+                                        bottom: BorderSide(color: Colors.grey[200]!, width: 2),
+                                        right: BorderSide(color: Colors.grey[200]!, width: 2),
+                                      ),
+                                    ),
+                                    child: TextField(
+                                      controller: _emailController,
+                                      style: const TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold),
+                                      decoration: const InputDecoration(
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                        hintText: "user@example.com",
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // SEND BUTTON
+                                Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: _isSendingEmail 
+                                  ? Center(
+                                      child: Column(
+                                        children: [
+                                          const CircularProgressIndicator(color: Colors.black),
+                                          const SizedBox(height: 5),
+                                          Text(_loadingText, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                    )
+                                  : RetroButton(
+                                      icon: Icons.send,
+                                      label: "SEND",
+                                      color: const Color(0xFF008080), // Teal Win95
+                                      onTap: _handleSendEmail,
+                                    ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ],
@@ -230,8 +519,9 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
 }
 
 // =========================================================
-// WIDGET RETRO INTERACTIVE CARD
+// WIDGET HELPERS
 // =========================================================
+
 class RetroInteractiveCard extends StatefulWidget {
   final String label;
   final String assetPath;
@@ -319,16 +609,13 @@ class _RetroInteractiveCardState extends State<RetroInteractiveCard> {
   }
 }
 
-// =========================================================
-// WIDGET RETRO BUTTON
-// =========================================================
 class RetroButton extends StatefulWidget {
-  final IconData icon;
+  final IconData? icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
 
-  const RetroButton({super.key, required this.icon, required this.label, required this.color, required this.onTap});
+  const RetroButton({super.key, this.icon, required this.label, required this.color, required this.onTap});
 
   @override
   State<RetroButton> createState() => _RetroButtonState();
@@ -355,17 +642,36 @@ class _RetroButtonState extends State<RetroButton> {
           scale: _isPressed ? 0.95 : (_isHovered ? 1.05 : 1.0),
           duration: const Duration(milliseconds: 100),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
               color: widget.color,
-              border: Border.all(width: 3, color: Colors.white),
-              boxShadow: _isPressed ? [] : [const BoxShadow(color: Colors.black54, offset: Offset(4, 4))],
+              border: Border(
+                top: BorderSide(color: Colors.white, width: 3),
+                left: BorderSide(color: Colors.white, width: 3),
+                bottom: BorderSide(color: Colors.black, width: 3),
+                right: BorderSide(color: Colors.black, width: 3),
+              ),
+              boxShadow: _isPressed 
+                  ? [] 
+                  : [const BoxShadow(color: Colors.black54, offset: Offset(2, 2))],
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(widget.icon, color: Colors.white),
-                const SizedBox(width: 10),
-                Text(widget.label, style: const TextStyle(fontFamily: 'Ambitsek', color: Colors.white, fontSize: 22, shadows: [Shadow(offset: Offset(2,2), color: Colors.black)])),
+                if (widget.icon != null) ...[
+                  Icon(widget.icon, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  widget.label, 
+                  style: const TextStyle(
+                    fontFamily: 'Ambitsek', 
+                    color: Colors.white, 
+                    fontSize: 20, 
+                    shadows: [Shadow(offset: Offset(1,1), color: Colors.black)]
+                  )
+                ),
               ],
             ),
           ),
@@ -375,9 +681,6 @@ class _RetroButtonState extends State<RetroButton> {
   }
 }
 
-// =========================================================
-// WIDGET OUTLINED TEXT
-// =========================================================
 class OutlinedText extends StatelessWidget {
   final String text;
   final String fontFamily;
@@ -538,7 +841,6 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
           if (provider.selectedMode == FrameMode.static && provider.selectedFrameAsset != null)
              IgnorePointer(child: Image.asset(provider.selectedFrameAsset!, fit: BoxFit.contain, width: width)),
           
-          // [REVISI] STICKERS DIRENDER DI SINI (POSISI & ROTASI)
           ...provider.stickers.map((s) => Positioned(
             left: 0, top: 0,
             child: Transform.rotate(
@@ -556,8 +858,6 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
 
   Widget _buildCustomContent(PhotoProvider provider, List<int> indices) {
     final photos = indices.map((i) => i < provider.photos.length ? provider.photos[i].imageData : Uint8List(0)).toList();
-    
-    // [REVISI] CORNER RADIUS DI SINI (15.0)
     final double radius = 15.0; 
 
     if (provider.customLayout == CustomLayout.vertical) {
@@ -676,14 +976,13 @@ class _VideoPreviewPageState extends State<_VideoPreviewPage> {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     int count = provider.photos.length;
     if (count == 0) return;
-    if (count == 3) {
-      _currentDisplayIndices = [];
-      for (int i = 0; i < 6; i++) {
-        int photoIndex = (i + _tick) % count; 
-        _currentDisplayIndices.add(photoIndex);
-      }
-    } else {
-      _currentDisplayIndices = List.generate(count, (i) => i);
+
+    int slotCount = (count == 3) ? 6 : count;
+
+    _currentDisplayIndices = [];
+    for (int i = 0; i < slotCount; i++) {
+      int photoIndex = (i + _tick) % count; 
+      _currentDisplayIndices.add(photoIndex);
     }
   }
 
@@ -747,7 +1046,6 @@ class _VideoFrameBuilder extends StatelessWidget {
           if (provider.selectedMode == FrameMode.static && provider.selectedFrameAsset != null)
              IgnorePointer(child: Image.asset(provider.selectedFrameAsset!, fit: BoxFit.contain, width: width)),
           
-          // [REVISI] STIKER DI VIDEO JUGA HARUS MUNCUL
           ...provider.stickers.map((s) => Positioned(
             left: 0, top: 0,
             child: Transform.rotate(
@@ -768,7 +1066,6 @@ class _VideoFrameBuilder extends StatelessWidget {
       return (i < provider.photos.length) ? provider.photos[i].imageData : Uint8List(0);
     }).toList();
 
-    // [REVISI] CORNER RADIUS DI SINI (15.0)
     final double radius = 15.0; 
 
     if (provider.customLayout == CustomLayout.vertical) {
@@ -799,7 +1096,7 @@ class _VideoFrameBuilder extends StatelessWidget {
         ),
         itemCount: indices.length, 
         itemBuilder: (context, index) {
-          if (photos[index].isEmpty) return Container(color: Colors.grey);
+          if (index >= photos.length || photos[index].isEmpty) return Container(color: Colors.grey);
           return Image.memory(photos[index], fit: BoxFit.cover);
         },
       ),
