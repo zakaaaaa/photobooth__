@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart'; 
+import 'package:webview_windows/webview_windows.dart'; // IMPORT WAJIB UNTUK WINDOWS
 import '../providers/photo_provider.dart';
 import '../services/api_service.dart';
-import 'frame_selection_page.dart'; // <--- 1. UBAH IMPORT KE SINI
+import 'frame_selection_page.dart';
 
 class PaymentPage extends StatefulWidget {
   const PaymentPage({super.key});
@@ -15,108 +15,99 @@ class PaymentPage extends StatefulWidget {
 
 class _PaymentPageState extends State<PaymentPage> {
   // State UI
-  bool _isSelectionMode = true; // True = Pilih Menu, False = Proses Bayar
+  bool _isSelectionMode = true; 
   bool _isLoading = false;
   bool _isPaid = false;
-  bool _isChecking = false;
-
+  
   // Payment Data
-  String? _paymentUrl;
   String? _currentUuid;
   Timer? _pollingTimer;
   final double _sessionPrice = 10000;
 
+  // WEBVIEW CONTROLLER (KHUSUS WINDOWS)
+  final WebviewController _webviewController = WebviewController();
+  bool _isWebviewReady = false;
+
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _webviewController.dispose(); // Hapus controller saat keluar
     super.dispose();
   }
 
   // --- LOGIC 1: MEMILIH METODE PEMBAYARAN ---
   void _onSelectQRIS() {
     setState(() {
-      _isSelectionMode = false; // Sembunyikan menu, tampilkan loading
+      _isSelectionMode = false; 
       _isLoading = true;
     });
-    // Jalankan proses generate link (Existing Logic)
     _initPaymentProcess();
   }
 
   void _onSelectVoucher() {
-    // Logic Voucher (Placeholder)
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Fitur Voucher akan segera hadir!")),
     );
   }
 
-  // --- LOGIC 2: PROSES GENERATE LINK ---
+  // --- LOGIC 2: PROSES GENERATE LINK & INIT WEBVIEW ---
   void _initPaymentProcess() async {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     final apiService = Provider.of<ApiService>(context, listen: false);
 
-    // A. Generate UUID Baru
+    // 1. Setup Data
     String newUuid = "sesi-${DateTime.now().millisecondsSinceEpoch}";
     _currentUuid = newUuid; 
     provider.setSessionUuid(newUuid); 
 
-    // B. Start Session Database
+    // 2. Start Session di DB
     bool sessionCreated = await apiService.startSession(newUuid);
     if (!sessionCreated) {
-      if (mounted) {
-        setState(() { _isLoading = false; _isSelectionMode = true; }); // Balik ke menu
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal membuat sesi database")));
-      }
+      _resetToMenu("Gagal membuat sesi database");
       return;
     }
 
-    // C. Request URL Pembayaran
+    // 3. Request URL DOKU dari Laravel
+    // NOTE: Backend Anda mengembalikan 'payment_url'
     String? url = await apiService.generatePaymentLink(newUuid, _sessionPrice);
 
-    if (mounted) {
-      if (url != null) {
-        setState(() {
-          _paymentUrl = url;
-          _isLoading = false; // Loading selesai, tampilkan tombol kontrol
+    if (mounted && url != null) {
+      // 4. Inisialisasi WebView Windows
+      try {
+        await _webviewController.initialize();
+        await _webviewController.loadUrl(url);
+        
+        // Listen URL changes (Opsional: Deteksi redirect sukses DOKU)
+        _webviewController.url.listen((currentUrl) {
+           // Di PaymentController.php, callback_url Anda = http://google.com
+           if (currentUrl.contains("google.com")) {
+             _handlePaymentSuccess(); // Auto success jika redirect
+           }
         });
 
-        _launchPaymentUrl();
-        _startPolling(newUuid);
-      } else {
-        setState(() { _isLoading = false; _isSelectionMode = true; });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal mendapatkan link pembayaran")));
+        if (mounted) {
+          setState(() {
+            _isWebviewReady = true;
+            _isLoading = false; 
+          });
+          _startPolling(newUuid); // Tetap polling untuk jaga-jaga
+        }
+      } catch (e) {
+        _resetToMenu("Gagal memuat WebView: $e");
       }
+    } else {
+      _resetToMenu("Gagal mendapatkan link pembayaran");
     }
   }
 
-  void _launchPaymentUrl() async {
-    if (_paymentUrl != null) {
-      final Uri uri = Uri.parse(_paymentUrl!);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    }
-  }
-
-  // --- LOGIC 3: CEK STATUS & POLLING ---
-  void _checkStatusManual() async {
-    if (_currentUuid == null) return;
-    setState(() => _isChecking = true);
-    
-    final apiService = Provider.of<ApiService>(context, listen: false);
-    bool paid = await apiService.checkPaymentStatus(_currentUuid!);
-
+  void _resetToMenu(String message) {
     if (mounted) {
-      setState(() => _isChecking = false);
-      if (paid) {
-        _handlePaymentSuccess();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Pembayaran belum diterima. Coba refresh lagi.")),
-        );
-      }
+      setState(() { _isLoading = false; _isSelectionMode = true; });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
+  // --- LOGIC 3: POLLING ---
   void _startPolling(String uuid) {
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted) { timer.cancel(); return; }
@@ -132,14 +123,13 @@ class _PaymentPageState extends State<PaymentPage> {
 
   void _handlePaymentSuccess() {
     _pollingTimer?.cancel();
+    if (_isPaid) return; // Prevent double call
+
     setState(() { _isPaid = true; });
-    
-    // Reset data foto lama agar bersih untuk sesi baru
     Provider.of<PhotoProvider>(context, listen: false).reset();
 
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
-        // 2. NAVIGASI KE FRAME SELECTION PAGE
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const FrameSelectionPage()),
@@ -156,148 +146,111 @@ class _PaymentPageState extends State<PaymentPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. BACKGROUND IMAGE
+          // 1. BACKGROUND
           Positioned.fill(
-            child: Image.asset(
-              "assets/images/bg.png", // Background Pixel Art
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset("assets/images/bg.png", fit: BoxFit.cover),
           ),
 
-          // 2. KONTEN UTAMA
+          // 2. KONTEN
           Center(
             child: _isSelectionMode 
-              ? _buildSelectionMenu() // TAMPILAN PILIH MENU (QRIS/VOUCHER)
-              : _buildPaymentProcessUI(), // TAMPILAN PROSES BAYAR
+              ? _buildSelectionMenu() 
+              : _buildPaymentProcessUI(), 
           ),
         ],
       ),
     );
   }
 
-  // --- WIDGET: MENU PILIHAN (QRIS / VOUCHER) ---
   Widget _buildSelectionMenu() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // TITLE
         const OutlinedText(
           text: "CHOOSE\nPAYMENT METHOD",
-          fontFamily: 'Ambitsek',
-          fontSize: 70,
-          textColor: Color(0xFFFFED00),
-          outlineColor: Color(0xFFEF7D30),
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1.0,
-          hasShadow: true,
+          fontFamily: 'Ambitsek', fontSize: 70, textColor: Color(0xFFFFED00), outlineColor: Color(0xFFEF7D30), fontWeight: FontWeight.w900, letterSpacing: 1.0, hasShadow: true,
         ),
-        
         const SizedBox(height: 50),
-
-        // KARTU PILIHAN (ROW)
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // KARTU 1: QRIS
-            PixelCard(
-              title: "QRIS",
-              imagePath: "assets/images/qris.png", 
-              onTap: _onSelectQRIS,
-            ),
-
-            const SizedBox(width: 30), // Jarak antar kartu
-
-            // KARTU 2: VOUCHER
-            PixelCard(
-              title: "VOUCHER",
-              imagePath: "assets/images/voucher.png", 
-              onTap: _onSelectVoucher,
-            ),
+            PixelCard(title: "QRIS", imagePath: "assets/images/qris.png", onTap: _onSelectQRIS),
+            const SizedBox(width: 30),
+            PixelCard(title: "VOUCHER", imagePath: "assets/images/voucher.png", onTap: _onSelectVoucher),
           ],
         ),
       ],
     );
   }
 
-  // --- WIDGET: UI SAAT PROSES BAYAR (LOADING / TOMBOL BROWSER) ---
   Widget _buildPaymentProcessUI() {
-    // Container Putih Transparan agar tulisan terbaca di atas background pixel
     return Container(
-      padding: const EdgeInsets.all(25),
-      margin: const EdgeInsets.symmetric(horizontal: 20),
+      // Ukuran Container disesuaikan agar WebView muat
+      width: 500, 
+      height: 600,
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFFC0C0C0), // Warna dasar Windows 95
         border: Border.all(width: 4, color: Colors.black),
-        boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(5, 5), blurRadius: 0)],
+        boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(8, 8), blurRadius: 0)],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          if (_isLoading) ...[
-            const CircularProgressIndicator(),
-            const SizedBox(height: 20),
-            const Text("Menghubungkan ke Server...", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ] 
-          else if (_isPaid) ...[
-            const Icon(Icons.check_circle, color: Colors.green, size: 80),
-            const SizedBox(height: 20),
-            const Text("SUKSES!", style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, fontFamily: 'Ambitsek')),
-            const Text("Silakan Pilih Frame...", style: TextStyle(fontSize: 16)), // Text diupdate
-          ] 
-          else ...[
-            const Text("Menunggu Pembayaran", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Ambitsek')),
-            const SizedBox(height: 10),
-            Text("Total: Rp ${_sessionPrice.toStringAsFixed(0)}", style: const TextStyle(fontSize: 20)),
-            const SizedBox(height: 30),
-            
-            // Tombol Buka Browser
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-              ),
-              onPressed: _launchPaymentUrl,
-              icon: const Icon(Icons.open_in_browser),
-              label: const Text("Buka Halaman Bayar"),
+          // HEADER WINDOWS 95 STYLE
+          Container(
+            height: 30,
+            color: const Color(0xFF0000AA),
+            child: const Center(
+              child: Text("PAYMENT GATEWAY - QRIS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
             ),
-            
-            const SizedBox(height: 15),
-            
-            // Tombol Cek Status (Dengan Fitur Bypass Long Press)
-            GestureDetector(
-              onLongPress: () {
-                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("⚡ DEV MODE: Bypassing Payment...")));
-                 _handlePaymentSuccess();
-              },
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+          ),
+          const SizedBox(height: 10),
+
+          // ISI KONTEN (LOADING / WEBVIEW / SUKSES)
+          Expanded(
+            child: _isPaid 
+            ? Column( // TAMPILAN SUKSES
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.green, size: 80),
+                  const SizedBox(height: 20),
+                  const Text("PAYMENT SUCCESS!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Ambitsek')),
+                  const Text("Redirecting...", style: TextStyle(fontSize: 16)),
+                ],
+              )
+            : _isLoading || !_isWebviewReady
+              ? const Center(child: CircularProgressIndicator()) // TAMPILAN LOADING
+              : Stack( // TAMPILAN WEBVIEW
+                  children: [
+                    // WIDGET WEBVIEW (Browser Embedded)
+                    Webview(_webviewController),
+                    
+                    // Tombol Cancel Kecil di pojok (Optional)
+                    Positioned(
+                      bottom: 0, right: 0,
+                      child: TextButton(
+                        onPressed: () {
+                           setState(() { _isSelectionMode = true; _isWebviewReady = false; });
+                           _webviewController.stop(); // Stop loading
+                        },
+                        child: const Text("CANCEL", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                      ),
+                    )
+                  ],
                 ),
-                onPressed: _isChecking ? null : _checkStatusManual,
-                icon: _isChecking 
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-                  : const Icon(Icons.refresh),
-                label: Text(_isChecking ? "Mengecek..." : "Saya Sudah Bayar"),
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            TextButton(
-              onPressed: () {
-                setState(() => _isSelectionMode = true); // Tombol Kembali ke Menu
-              }, 
-              child: const Text("Kembali ke Pilihan")
-            ),
-          ]
+          ),
         ],
       ),
     );
   }
 }
+
+// ... (Simpan Code PixelCard dan OutlinedText seperti file asli Anda di sini) ...
+// Pastikan menyalin ulang kelas PixelCard dan OutlinedText di bawah sini 
+// agar tidak ada error undefined class.
+
+// Widget PixelCard dan OutlinedText TETAP SAMA (tidak saya tulis ulang agar hemat tempat)
+// Pastikan bagian bawah file ini tetap ada class PixelCard dan OutlinedText dari kode lama Anda.
 
 // =========================================================
 // WIDGET: PIXEL CARD (TIDAK BERUBAH)

@@ -3,22 +3,22 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // IP VPS Anda
-  final String baseUrl = "http://168.231.125.203/api"; 
+  // ✅ UPDATE 1: Tambahkan port 8080 (Sesuai settingan VPS Laravel Anda)
+  final String baseUrl = "http://168.231.125.203:8080/api"; 
 
   // =================================================================
-  // 1. PAYMENT INTEGRATION (DOKU)
+  // 1. PAYMENT INTEGRATION (DOKU QRIS DIRECT)
   // =================================================================
 
-  // Generate Link Pembayaran (Minta ke Laravel)
+  // Generate QR String (Minta ke Laravel)
   Future<String?> generatePaymentLink(String sessionUuid, double amount) async {
     try {
       final uri = Uri.parse("$baseUrl/payment/generate");
-      print("💰 Requesting payment url for: $sessionUuid");
+      print("💰 Requesting QRIS for: $sessionUuid");
 
       final response = await http.post(
         uri,
-        headers: {"Accept": "application/json"}, // Header penting
+        headers: {"Accept": "application/json"},
         body: {
           'session_uuid': sessionUuid,
           'amount': amount.toStringAsFixed(0),
@@ -29,9 +29,12 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['payment_url']; // URL DOKU Checkout
+        
+        // ✅ UPDATE 2: Ambil 'qr_content' (String kode QR), BUKAN 'payment_url'
+        // Karena kita sekarang pakai QRIS Direct, bukan halaman checkout web.
+        return data['qr_content']; 
       } else {
-        print("❌ Gagal Generate Payment: ${response.body}");
+        print("❌ Gagal Generate QRIS: ${response.body}");
       }
     } catch (e) {
       print("❌ Error Payment Connection: $e");
@@ -61,7 +64,7 @@ class ApiService {
   }
 
   // =================================================================
-  // 2. SESSION & UPLOAD (EXISTING)
+  // 2. SESSION & UPLOAD (TIDAK ADA PERUBAHAN)
   // =================================================================
 
   Future<bool> startSession(String uuid) async {
