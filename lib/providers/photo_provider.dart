@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart'; // WAJIB ADA: Tambahkan path_provider di pubspec.yaml
+import 'package:path_provider/path_provider.dart'; 
+import '../services/license_service.dart'; // <--- WAJIB IMPORT INI
 
 // ==========================================
 // 1. ENUMS
@@ -76,13 +77,34 @@ class PhotoProvider extends ChangeNotifier {
     return "$minutes:$seconds";
   }
 
+  // --- HWID & UUID MANAGEMENT (UPDATED) ---
   String _sessionUuid = ''; 
   String get sessionUuid => _sessionUuid;
+
+  // Variable untuk menyimpan HWID mesin
+  String _machineId = '';
+  String get machineId => _machineId;
+
+  // Fungsi untuk Load HWID (Dipanggil di awal / Splash Screen / Payment)
+  Future<void> initMachineId() async {
+    if (_machineId.isEmpty) {
+      try {
+        // Panggil fungsi getHardwareId dari LicenseService (Pastikan Public)
+        _machineId = await LicenseService().getHardwareId();
+        notifyListeners();
+        print("💻 Machine ID Loaded: $_machineId");
+      } catch (e) {
+        print("❌ Gagal Load Machine ID: $e");
+      }
+    }
+  }
 
   void setSessionUuid(String uuid) {
     _sessionUuid = uuid;
     notifyListeners();
   }
+
+  // --- PHOTO MANAGEMENT ---
 
   void removePhotoAt(int index) {
     if (index >= 0 && index < _photos.length) {
@@ -117,8 +139,17 @@ class PhotoProvider extends ChangeNotifier {
   Uint8List? _finalImageBytes;
   Uint8List? get finalImageBytes => _finalImageBytes;
 
+  // Property finalFramePath (Untuk kompatibilitas dengan UI lama)
+  String? _finalFramePath;
+  String? get finalFramePath => _finalFramePath;
+
   void setFinalImageBytes(Uint8List bytes) {
     _finalImageBytes = bytes;
+    notifyListeners();
+  }
+
+  void setFinalFrame(String path) {
+    _finalFramePath = path;
     notifyListeners();
   }
 
@@ -185,6 +216,12 @@ class PhotoProvider extends ChangeNotifier {
       ));
       notifyListeners();
     }
+  }
+
+  // Overload addPhoto untuk string path (Kompatibilitas)
+  void addPhotoPath(String path) {
+    // Implementasi jika diperlukan, saat ini kita fokus byte data
+    // _photos.add(...)
   }
 
   void setSelectedFilter(PhotoFilter filter) {
@@ -307,11 +344,10 @@ class PhotoProvider extends ChangeNotifier {
   }
 
   // ==========================================
-  // E. FITUR BARU: SAVE PHOTOS LOCALLY (INI YANG BIKIN ERROR)
+  // E. SAVE PHOTOS LOCALLY
   // ==========================================
   Future<String> savePhotosLocally(String userEmail, Uint8List? finalStripBytes) async {
     try {
-      // 1. Lokasi Folder: Documents/Photobooth_Backup/Tanggal/SessionID
       final directory = await getApplicationDocumentsDirectory();
       final dateStr = DateTime.now().toString().split(' ')[0];
       final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -322,13 +358,13 @@ class PhotoProvider extends ChangeNotifier {
         await sessionFolder.create(recursive: true);
       }
 
-      // 2. SIMPAN FOTO MENTAH (Tetap perlu untuk backup)
+      // 2. SIMPAN FOTO MENTAH
       for (int i = 0; i < _photos.length; i++) {
         final file = File('${sessionFolder.path}/raw_photo_$i.jpg');
         await file.writeAsBytes(_photos[i].imageData);
       }
 
-      // 3. SIMPAN FOTO STRIP / FINAL (PENTING BUAT EMAIL)
+      // 3. SIMPAN FOTO STRIP / FINAL
       if (finalStripBytes != null) {
         final stripFile = File('${sessionFolder.path}/final_strip_result.png');
         await stripFile.writeAsBytes(finalStripBytes);
@@ -339,7 +375,6 @@ class PhotoProvider extends ChangeNotifier {
 
       // 4. Catat Log CSV
       final logFile = File('${directory.path}/Photobooth_Backup/$dateStr/data_pengunjung.csv');
-      // Kolom: SessionID, Email, PathFolder, Status
       final csvLine = '$sessionId,$userEmail,${sessionFolder.path},PENDING\n';
       await logFile.writeAsString(csvLine, mode: FileMode.append);
 
@@ -359,8 +394,13 @@ class PhotoProvider extends ChangeNotifier {
     print("🧹 RESET SESSION: Membersihkan memori foto...");
 
     _photos.clear();
-    _finalImageBytes = null; // FIX: Agar email tidak kirim foto lama
-
+    _finalImageBytes = null; 
+    _finalFramePath = null;
+    
+    // Jangan reset _machineId di sini karena HWID tetap sama
+    // Jangan reset _sessionUuid di sini jika flow payment -> foto (UUID dibuat di payment)
+    // Kecuali start session baru dari awal.
+    
     _selectedFilter = PhotoFilter.none;
     _isSessionActive = false;
     _sessionTimer?.cancel();

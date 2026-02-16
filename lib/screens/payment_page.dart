@@ -63,14 +63,20 @@ class _PaymentPageState extends State<PaymentPage> {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     final apiService = Provider.of<ApiService>(context, listen: false);
 
+    // 1. PASTIKAN HWID SUDAH DILOAD (DINAMIS)
+    if (provider.machineId.isEmpty) {
+       await provider.initMachineId();
+    }
+
     // A. Generate UUID Baru
     String newUuid = "sesi-${DateTime.now().millisecondsSinceEpoch}";
     provider.setSessionUuid(newUuid); 
 
     // B. Start Session di Database (Default QRIS)
-    // Kita kirim paymentMethod: 'qris' dan amount normal
+    // Kita kirim paymentMethod: 'qris', amount normal, DAN HWID DINAMIS
     bool sessionCreated = await apiService.startSession(
       newUuid, 
+      hwid: provider.machineId, // <--- WAJIB DIISI SEKARANG
       paymentMethod: 'qris', 
       amount: _sessionPrice.toStringAsFixed(0)
     );
@@ -123,10 +129,15 @@ class _PaymentPageState extends State<PaymentPage> {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     final apiService = Provider.of<ApiService>(context, listen: false);
 
-    // 1. Buat UUID Khusus Bypass
+    // 1. PASTIKAN HWID SUDAH DILOAD (DINAMIS)
+    if (provider.machineId.isEmpty) {
+       await provider.initMachineId();
+    }
+
+    // 2. Buat UUID Khusus Bypass
     String bypassUuid = "bypass-${DateTime.now().millisecondsSinceEpoch}";
     
-    // 2. Feedback Loading
+    // 3. Feedback Loading
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text("🚀 DEV MODE: Mendaftarkan Sesi Gratis ke Server..."),
@@ -135,16 +146,17 @@ class _PaymentPageState extends State<PaymentPage> {
       ),
     );
 
-    // 3. PANGGIL API START SESSION (PENTING!)
+    // 4. PANGGIL API START SESSION (PENTING!)
     // Agar server mencatat transaksi ini sebagai 'paid' dan QR Code valid.
     bool success = await apiService.startSession(
       bypassUuid, 
+      hwid: provider.machineId, // <--- WAJIB DIISI SEKARANG
       paymentMethod: 'bypass', // Method khusus
       amount: '0'              // Harga 0
     );
 
     if (success) {
-      // 4. Set UUID ke Provider & Lanjut
+      // 5. Set UUID ke Provider & Lanjut
       provider.setSessionUuid(bypassUuid);
       _handlePaymentSuccess();
     } else {
@@ -203,7 +215,7 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   // =========================================================================
-  // UI BUILDER
+  // UI BUILDER (TIDAK BERUBAH)
   // =========================================================================
   @override
   Widget build(BuildContext context) {

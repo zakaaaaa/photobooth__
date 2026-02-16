@@ -812,7 +812,7 @@ class _GifPreviewPageState extends State<_GifPreviewPage> {
 // PAGE 3: VIDEO PREVIEW
 // =========================================================
 class _VideoPreviewPage extends StatefulWidget {
-  const _VideoPreviewPage({super.key});
+  const _VideoPreviewPage();
   @override
   State<_VideoPreviewPage> createState() => _VideoPreviewPageState();
 }

@@ -13,7 +13,7 @@ class ApiService {
   Future<String?> generatePaymentLink(String sessionUuid, double amount) async {
     try {
       final uri = Uri.parse("$baseUrl/payment/generate"); 
-      print("💰 Requesting QRIS: $uri");
+      print("💰 Requesting QRIS: $uri"); 
 
       final response = await http.post(
         uri,
@@ -77,22 +77,24 @@ class ApiService {
     }
   }
 
-  // 2. Start Session (UPDATED UNTUK BYPASS)
-  // Menambahkan parameter paymentMethod & amount agar fleksibel
-  Future<bool> startSession(String uuid, {String paymentMethod = 'qris', String amount = '0'}) async {
+  // 2. Start Session (SUDAH DINAMIS)
+  // SEKARANG WAJIB MENGIRIM PARAMETER 'hwid'
+  Future<bool> startSession(String uuid, {
+    required String hwid, // <--- WAJIB DIISI (Dinamis dari Provider)
+    String paymentMethod = 'qris', 
+    String amount = '0'
+  }) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/start-session");
-      print("🚀 Start Session ($paymentMethod): $uri");
+      print("🚀 Start Session ($paymentMethod) HWID: $hwid"); // Debugging HWID
 
       final response = await http.post(
         uri,
         body: {
-            // NOTE: HWID sebaiknya dinamis dari LicenseService, 
-            // tapi untuk sekarang hardcode dulu tidak apa-apa sesuai test Anda.
-            'hwid': 'F4DAFFE8-75F5-5D21-AF51-ABD0A74A9A14', 
+            'hwid': hwid, // <--- Menggunakan variable, bukan hardcode lagi
             'transaction_code': uuid,
-            'amount': amount,          // <-- Kirim harga (0 jika bypass)
-            'payment_method': paymentMethod, // <-- Kirim metode (bypass/qris)
+            'amount': amount,
+            'payment_method': paymentMethod,
         },
       );
       
@@ -122,7 +124,6 @@ class ApiService {
   }
 
   // 4. Upload Final Result (Frame yang sudah jadi)
-  // Return String URL jika sukses, null jika gagal
   Future<String?> uploadFinalResult(String sessionUuid, String filePath) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/upload-final");
@@ -139,7 +140,6 @@ class ApiService {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
-        // Mengembalikan URL gambar hasil upload (dari controller: 'url')
         return data['url']; 
       }
     } catch (e) {

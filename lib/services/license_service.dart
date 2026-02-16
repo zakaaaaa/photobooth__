@@ -4,11 +4,12 @@ import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
 
 class LicenseService {
-  // Ganti dengan IP VPS kamu
+  // URL Endpoint (Sudah benar sesuai context sebelumnya)
   final String _baseUrl = 'http://168.231.125.203:8080/api/photobooth/license/check';
 
   Future<Map<String, dynamic>> checkLicense() async {
-    String hwid = await _getHardwareId();
+    // PERUBAHAN 1: Panggil fungsi public (tanpa garis bawah)
+    String hwid = await getHardwareId();
     
     // Debugging: Print HWID biar gampang dicopy ke Database nanti
     print("DEBUG: HWID DETECTED -> $hwid");
@@ -22,7 +23,6 @@ class LicenseService {
         },
         body: jsonEncode({
           'hwid': hwid, 
-          // 'hwid': 'LAPTOP-ZAKA-PRO' // <-- Un-comment ini kalau mau ngetes bypass dulu
         }),
       );
 
@@ -52,8 +52,12 @@ class LicenseService {
     }
   }
 
+  // =================================================================
+  // PERBAIKAN UTAMA: UBAH JADI PUBLIC (Hapus garis bawah '_')
+  // =================================================================
   // Fungsi Sakti untuk ambil ID Unik
-  Future<String> _getHardwareId() async {
+  // Agar bisa dipanggil dari PhotoProvider, fungsi ini harus PUBLIC
+  Future<String> getHardwareId() async {
     DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
     
     if (Platform.isWindows) {
