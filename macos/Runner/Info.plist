@@ -32,5 +32,9 @@
 	<string>This app needs camera access to take photos for the photobooth</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to save photos</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikasi membutuhkan akses kamera untuk photobooth.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Aplikasi membutuhkan akses mikrofon untuk video.</string>
 </dict>
 </plist>

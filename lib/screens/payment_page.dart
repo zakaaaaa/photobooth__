@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:webview_windows/webview_windows.dart'; // IMPORT WAJIB UNTUK WINDOWS
+import 'package:webview_windows/webview_windows.dart'; // Library Khusus Windows
 import '../providers/photo_provider.dart';
 import '../services/api_service.dart';
 import 'frame_selection_page.dart';
@@ -20,18 +20,26 @@ class _PaymentPageState extends State<PaymentPage> {
   bool _isPaid = false;
   
   // Payment Data
-  String? _currentUuid;
-  Timer? _pollingTimer;
   final double _sessionPrice = 10000;
+  Timer? _pollingTimer;
 
-  // WEBVIEW CONTROLLER (KHUSUS WINDOWS)
+  // WEBVIEW CONTROLLER (Engine Browser Windows)
   final WebviewController _webviewController = WebviewController();
   bool _isWebviewReady = false;
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
-    _webviewController.dispose(); // Hapus controller saat keluar
+    
+    // PERBAIKAN: Bungkus dispose webview dalam try-catch
+    try {
+      if (_isWebviewReady) {
+        _webviewController.dispose();
+      }
+    } catch (e) {
+      debugPrint("WebView dispose error (Ignored): $e");
+    }
+    
     super.dispose();
   }
 
@@ -50,53 +58,102 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // --- LOGIC 2: PROSES GENERATE LINK & INIT WEBVIEW ---
+  // --- LOGIC 2: PROSES REQUEST URL & EMBED WEBVIEW ---
   void _initPaymentProcess() async {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     final apiService = Provider.of<ApiService>(context, listen: false);
 
-    // 1. Setup Data
+    // A. Generate UUID Baru
     String newUuid = "sesi-${DateTime.now().millisecondsSinceEpoch}";
-    _currentUuid = newUuid; 
     provider.setSessionUuid(newUuid); 
 
-    // 2. Start Session di DB
-    bool sessionCreated = await apiService.startSession(newUuid);
+    // B. Start Session di Database (Default QRIS)
+    // Kita kirim paymentMethod: 'qris' dan amount normal
+    bool sessionCreated = await apiService.startSession(
+      newUuid, 
+      paymentMethod: 'qris', 
+      amount: _sessionPrice.toStringAsFixed(0)
+    );
+
     if (!sessionCreated) {
-      _resetToMenu("Gagal membuat sesi database");
+      _resetToMenu("Gagal membuat sesi database. Cek koneksi internet.");
       return;
     }
 
-    // 3. Request URL DOKU dari Laravel
-    // NOTE: Backend Anda mengembalikan 'payment_url'
+    // C. Request URL DOKU
     String? url = await apiService.generatePaymentLink(newUuid, _sessionPrice);
 
     if (mounted && url != null) {
-      // 4. Inisialisasi WebView Windows
       try {
         await _webviewController.initialize();
-        await _webviewController.loadUrl(url);
         
-        // Listen URL changes (Opsional: Deteksi redirect sukses DOKU)
         _webviewController.url.listen((currentUrl) {
-           // Di PaymentController.php, callback_url Anda = http://google.com
-           if (currentUrl.contains("google.com")) {
-             _handlePaymentSuccess(); // Auto success jika redirect
+           if (currentUrl.contains("google.com") || currentUrl.contains("success")) {
+             _handlePaymentSuccess(); 
            }
         });
 
+        // 1. LOAD URL
+        await _webviewController.loadUrl(url);
+        
+        // 2. TAMPILKAN UI
         if (mounted) {
           setState(() {
             _isWebviewReady = true;
             _isLoading = false; 
           });
-          _startPolling(newUuid); // Tetap polling untuk jaga-jaga
+          
+          _startPolling(newUuid);
         }
+
+        // 3. AUTO SCROLL LOGIC
+        await Future.delayed(const Duration(seconds: 2));
+        await _webviewController.executeScript('window.scrollBy(0, 400);'); 
+
       } catch (e) {
-        _resetToMenu("Gagal memuat WebView: $e");
+        _resetToMenu("Error WebView: Silakan install Edge WebView2 Runtime.");
       }
     } else {
-      _resetToMenu("Gagal mendapatkan link pembayaran");
+      _resetToMenu("Gagal mendapatkan link pembayaran.");
+    }
+  }
+
+  // --- LOGIC BARU: BYPASS PAYMENT (DEV MODE) ---
+  void _triggerBypass() async {
+    final provider = Provider.of<PhotoProvider>(context, listen: false);
+    final apiService = Provider.of<ApiService>(context, listen: false);
+
+    // 1. Buat UUID Khusus Bypass
+    String bypassUuid = "bypass-${DateTime.now().millisecondsSinceEpoch}";
+    
+    // 2. Feedback Loading
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("🚀 DEV MODE: Mendaftarkan Sesi Gratis ke Server..."),
+        duration: Duration(seconds: 2),
+        backgroundColor: Colors.orange,
+      ),
+    );
+
+    // 3. PANGGIL API START SESSION (PENTING!)
+    // Agar server mencatat transaksi ini sebagai 'paid' dan QR Code valid.
+    bool success = await apiService.startSession(
+      bypassUuid, 
+      paymentMethod: 'bypass', // Method khusus
+      amount: '0'              // Harga 0
+    );
+
+    if (success) {
+      // 4. Set UUID ke Provider & Lanjut
+      provider.setSessionUuid(bypassUuid);
+      _handlePaymentSuccess();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("❌ Gagal Bypass: Tidak bisa konek ke server."),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -107,7 +164,7 @@ class _PaymentPageState extends State<PaymentPage> {
     }
   }
 
-  // --- LOGIC 3: POLLING ---
+  // --- LOGIC 3: POLLING STATUS ---
   void _startPolling(String uuid) {
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted) { timer.cancel(); return; }
@@ -125,17 +182,24 @@ class _PaymentPageState extends State<PaymentPage> {
     _pollingTimer?.cancel();
     if (_isPaid) return; // Prevent double call
 
-    setState(() { _isPaid = true; });
-    Provider.of<PhotoProvider>(context, listen: false).reset();
+    if (mounted) {
+      setState(() { _isPaid = true; });
+      
+      // Reset data foto lama (bersihkan list foto sebelumnya)
+      Provider.of<PhotoProvider>(context, listen: false).reset();
 
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const FrameSelectionPage()),
-        );
-      }
-    });
+      // Note: UUID sudah diset di _initPaymentProcess atau _triggerBypass
+      // Jadi kita tidak perlu set dummy lagi disini.
+
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const FrameSelectionPage()),
+          );
+        }
+      });
+    }
   }
 
   // =========================================================================
@@ -151,17 +215,35 @@ class _PaymentPageState extends State<PaymentPage> {
             child: Image.asset("assets/images/bg.png", fit: BoxFit.cover),
           ),
 
-          // 2. KONTEN
+          // 2. KONTEN UTAMA
           Center(
             child: _isSelectionMode 
               ? _buildSelectionMenu() 
-              : _buildPaymentProcessUI(), 
+              : _buildPaymentContainer(), 
+          ),
+
+          // -----------------------------------------------------------
+          // 3. HIDDEN BYPASS BUTTON (POJOK KIRI BAWAH)
+          // -----------------------------------------------------------
+          Positioned(
+            bottom: 0,
+            left: 0,
+            child: GestureDetector(
+              onLongPress: _triggerBypass, // <--- Panggil fungsi baru disini
+              // Container transparan ukuran 50x50 pixel
+              child: Container(
+                width: 60,
+                height: 60,
+                color: Colors.transparent, // Ubah ke Colors.red.withOpacity(0.3) untuk debug posisi
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
+  // TAMPILAN MENU
   Widget _buildSelectionMenu() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -183,78 +265,91 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  Widget _buildPaymentProcessUI() {
+  // TAMPILAN KOTAK PEMBAYARAN (EMBEDDED WEBVIEW ADA DI SINI)
+  Widget _buildPaymentContainer() {
     return Container(
-      // Ukuran Container disesuaikan agar WebView muat
-      width: 500, 
-      height: 600,
-      padding: const EdgeInsets.all(15),
+      width: 500, // Lebar Kotak
+      height: 650, // Tinggi Kotak
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFFC0C0C0), // Warna dasar Windows 95
-        border: Border.all(width: 4, color: Colors.black),
-        boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(8, 8), blurRadius: 0)],
+        color: const Color(0xFFC0C0C0), // Warna Windows 95
+        border: Border.all(width: 3, color: Colors.black),
+        boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(10, 10), blurRadius: 0)],
       ),
       child: Column(
         children: [
-          // HEADER WINDOWS 95 STYLE
+          // HEADER KOTAK
           Container(
-            height: 30,
-            color: const Color(0xFF0000AA),
+            height: 35,
+            color: const Color(0xFF0000AA), // Biru Windows
             child: const Center(
-              child: Text("PAYMENT GATEWAY - QRIS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              child: Text("DOKU PAYMENT GATEWAY", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
             ),
           ),
-          const SizedBox(height: 10),
-
-          // ISI KONTEN (LOADING / WEBVIEW / SUKSES)
+          
+          // AREA KONTEN (WEBVIEW DISINI)
           Expanded(
-            child: _isPaid 
-            ? Column( // TAMPILAN SUKSES
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 80),
-                  const SizedBox(height: 20),
-                  const Text("PAYMENT SUCCESS!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Ambitsek')),
-                  const Text("Redirecting...", style: TextStyle(fontSize: 16)),
-                ],
-              )
-            : _isLoading || !_isWebviewReady
-              ? const Center(child: CircularProgressIndicator()) // TAMPILAN LOADING
-              : Stack( // TAMPILAN WEBVIEW
-                  children: [
-                    // WIDGET WEBVIEW (Browser Embedded)
-                    Webview(_webviewController),
-                    
-                    // Tombol Cancel Kecil di pojok (Optional)
-                    Positioned(
-                      bottom: 0, right: 0,
-                      child: TextButton(
-                        onPressed: () {
-                           setState(() { _isSelectionMode = true; _isWebviewReady = false; });
-                           _webviewController.stop(); // Stop loading
-                        },
-                        child: const Text("CANCEL", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                      ),
-                    )
-                  ],
-                ),
+            child: Container(
+              margin: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: Colors.black54, width: 2), // Efek inset
+              ),
+              child: _isPaid 
+                ? _buildSuccessView()
+                : (_isLoading || !_isWebviewReady)
+                    ? const Center(child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 10),
+                          Text("Connecting to DOKU...")
+                        ],
+                      ))
+                    : Webview(_webviewController), // <--- INI WIDGET EMBEDNYA
+            ),
           ),
+
+          // FOOTER (TOMBOL BATAL)
+          if (!_isPaid)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  shape: const BeveledRectangleBorder(),
+                ),
+                onPressed: () {
+                  _pollingTimer?.cancel();
+                  setState(() { _isSelectionMode = true; _isWebviewReady = false; });
+                },
+                child: const Text("CANCEL TRANSACTION"),
+              ),
+            ),
         ],
       ),
     );
   }
+
+  Widget _buildSuccessView() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.check_circle, color: Colors.green, size: 80),
+        const SizedBox(height: 20),
+        const Text("PAYMENT RECEIVED!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Ambitsek')),
+        const SizedBox(height: 10),
+        const Text("Redirecting to frame selection...", style: TextStyle(fontSize: 14)),
+      ],
+    );
+  }
 }
 
-// ... (Simpan Code PixelCard dan OutlinedText seperti file asli Anda di sini) ...
-// Pastikan menyalin ulang kelas PixelCard dan OutlinedText di bawah sini 
-// agar tidak ada error undefined class.
+// =========================================================================
+// WIDGET TAMBAHAN (Sama seperti sebelumnya)
+// =========================================================================
 
-// Widget PixelCard dan OutlinedText TETAP SAMA (tidak saya tulis ulang agar hemat tempat)
-// Pastikan bagian bawah file ini tetap ada class PixelCard dan OutlinedText dari kode lama Anda.
-
-// =========================================================
-// WIDGET: PIXEL CARD (TIDAK BERUBAH)
-// =========================================================
 class PixelCard extends StatefulWidget {
   final String title;
   final String imagePath; 
@@ -334,9 +429,6 @@ class _PixelCardState extends State<PixelCard> {
   }
 }
 
-// =========================================================
-// WIDGET: OUTLINED TEXT (TIDAK BERUBAH)
-// =========================================================
 class OutlinedText extends StatelessWidget {
   final String text;
   final String fontFamily;

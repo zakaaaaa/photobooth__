@@ -5,7 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 
 class LicenseService {
   // Ganti dengan IP VPS kamu
-  final String _baseUrl = 'http://168.231.125.203/api/license/check';
+  final String _baseUrl = 'http://168.231.125.203:8080/api/photobooth/license/check';
 
   Future<Map<String, dynamic>> checkLicense() async {
     String hwid = await _getHardwareId();

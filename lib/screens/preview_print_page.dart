@@ -9,13 +9,13 @@ import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:image/image.dart' as img; // Import Library Image
-import 'package:path_provider/path_provider.dart'; // Import untuk akses folder Download
+import 'package:image/image.dart' as img; 
+import 'package:path_provider/path_provider.dart'; 
+import 'package:qr_flutter/qr_flutter.dart'; // [WAJIB] Library QR Code
 
 import 'package:photobooth_app/providers/photo_provider.dart';
 import 'package:photobooth_app/screens/splash_screen.dart'; 
 import 'package:photobooth_app/services/api_service.dart';
-import 'package:photobooth_app/services/email_service.dart';
 
 // ==========================================
 // HALAMAN UTAMA: MENU PILIHAN PREVIEW
@@ -30,25 +30,18 @@ class PreviewPrintPage extends StatefulWidget {
 class _PreviewPrintPageState extends State<PreviewPrintPage> {
   
   // [KONFIGURASI TATA LETAK]
-  final double previewTextTopMargin = 105.0; 
+  final double previewTextTopMargin = 80.0; // Sedikit dinaikkan agar muat
   final double previewTextLeftMargin = 0.0;
   final double previewTextSize = 40.0; 
   
-  final double cardRowTopMargin = 30.0;
-  final double cardWidth = 250.0; 
-  final double cardHeight = 270.0;
+  final double cardRowTopMargin = 20.0;
+  final double cardWidth = 220.0; // Sedikit dikecilkan agar proporsional
+  final double cardHeight = 250.0;
   final double cardSpacing = 20.0;
 
-  // CONTROLLER UNTUK FORM EMAIL
-  final TextEditingController _emailController = TextEditingController();
-  bool _isSendingEmail = false;
-  String _loadingText = "SEND";
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    super.dispose();
-  }
+  // [KONFIGURASI URL WEBSITE ANDA]
+  // Ganti IP/Domain ini dengan alamat VPS Laravel Anda
+  final String _websiteBaseUrl = "http://168.231.125.203:8080/download"; 
 
   // =========================================================
   // FITUR 1: PRINT KE PRINTER
@@ -100,7 +93,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
     }
 
     try {
-      // 2. Cari Folder Downloads di Windows
+      // 2. Cari Folder Downloads
       Directory? downloadsDirectory;
       if (Platform.isWindows) {
         downloadsDirectory = await getDownloadsDirectory();
@@ -119,7 +112,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
       final file = File(savePath);
       await file.writeAsBytes(provider.finalImageBytes!);
 
-      // 5. Beri Notifikasi Sukses & Opsi Buka Folder
+      // 5. Beri Notifikasi Sukses
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -149,115 +142,17 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
   }
 
   // =========================================================
-  // FITUR 3: GENERATE GIF (HIGH QUALITY & EMAIL FRIENDLY)
-  // =========================================================
-  Future<File?> _generateGifFile(List<Uint8List> photos) async {
-    try {
-      if (photos.isEmpty) return null;
-      debugPrint("🎬 Membuat GIF HQ...");
-
-      // 1. Decode Foto Pertama
-      img.Image? baseImage = img.decodeImage(photos[0]);
-      if (baseImage == null) return null;
-
-      // Resize: width 600px, Interpolasi Cubic (Tajam)
-      baseImage = img.copyResize(baseImage, width: 600, interpolation: img.Interpolation.cubic);
-      baseImage.frameDuration = 500; // 0.5 detik per frame
-
-      // 2. Tambah Frame Sisanya
-      for (int i = 1; i < photos.length; i++) {
-        img.Image? nextImage = img.decodeImage(photos[i]);
-        if (nextImage != null) {
-          nextImage = img.copyResize(nextImage, width: 600, interpolation: img.Interpolation.cubic);
-          nextImage.frameDuration = 500; 
-          baseImage.addFrame(nextImage);
-        }
-      }
-
-      // 3. Encode ke GIF
-      Uint8List gifBytes = img.encodeGif(baseImage);
-
-      final tempDir = Directory.systemTemp;
-      final File gifFile = File('${tempDir.path}/video_${DateTime.now().millisecondsSinceEpoch}.gif');
-      await gifFile.writeAsBytes(gifBytes);
-      
-      return gifFile;
-
-    } catch (e) {
-      debugPrint("Error generating GIF: $e");
-    }
-    return null;
-  }
-
-  // =========================================================
-  // FITUR 4: KIRIM EMAIL (SIMPAN LOKAL DULU AGAR CEPAT)
-  // =========================================================
-  Future<void> _handleSendEmail() async {
-    final email = _emailController.text.trim();
-    
-    // Validasi Email Sederhana
-    if (email.isEmpty || !email.contains('@')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid email address!")),
-      );
-      return;
-    }
-
-    setState(() {
-      _isSendingEmail = true;
-      _loadingText = "SAVING..."; // Tampilkan status Saving
-    });
-
-    try {
-      final provider = Provider.of<PhotoProvider>(context, listen: false);
-      
-      // OPTIMASI: Simpan data ke harddisk dulu (Quick Mode)
-      // Pastikan Anda sudah menambahkan fungsi savePhotosLocally di PhotoProvider
-      // Jika belum, kode ini akan error. Jika error, hapus baris ini dan pakai logika lama.
-      await provider.savePhotosLocally(email, provider.finalImageBytes);
-      
-      if (!mounted) return;
-
-      // Beri Feedback Sukses
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Data Saved for $email! Email will be sent later."),
-          backgroundColor: Colors.green,
-        ),
-      );
-      
-      _emailController.clear();
-      
-      // Delay sedikit agar user baca pesan sukses
-      await Future.delayed(const Duration(seconds: 2));
-
-      if (!mounted) return;
-
-      // AUTO RESET & BALIK KE SPLASH SCREEN
-      provider.reset();
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const SplashScreen()), 
-        (route) => false,
-      );
-
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() {
-        _isSendingEmail = false;
-        _loadingText = "SEND";
-      });
-    }
-  }
-
-  // =========================================================
   // UI BUILDER UTAMA
   // =========================================================
   @override
   Widget build(BuildContext context) {
+    // Ambil Session UUID untuk Generate Link QR
+    final sessionUuid = Provider.of<PhotoProvider>(context).sessionUuid;
+    
+    // Logic Link: Base URL + UUID Sesi
+    // Contoh: http://192.168.1.10/download/sesi-12345
+    final String qrUrl = "$_websiteBaseUrl/$sessionUuid"; 
+
     return Scaffold(
       resizeToAvoidBottomInset: true, 
       body: Stack(
@@ -270,7 +165,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
           ),
 
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 40.0),
+            padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 30.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -289,7 +184,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                           bottom: cardRowTopMargin
                         ),
                         child: Text(
-                          "Preview",
+                          "Preview & Print",
                           style: TextStyle(
                             fontFamily: 'Ambitsek',
                             fontSize: previewTextSize,
@@ -340,9 +235,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                              label: "HOME",
                              color: Colors.redAccent,
                              onTap: () {
-                               // Reset Provider agar data bersih
                                Provider.of<PhotoProvider>(context, listen: false).reset();
-                               // Navigasi paksa ke Splash Screen
                                Navigator.of(context).pushAndRemoveUntil(
                                  MaterialPageRoute(builder: (_) => const SplashScreen()), 
                                  (route) => false,
@@ -352,7 +245,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                             
                             const SizedBox(width: 20),
 
-                            // 2. TOMBOL SAVE (DOWNLOAD KE LOKAL) - BARU!
+                            // 2. TOMBOL SAVE (DOWNLOAD KE LOKAL)
                             RetroButton(
                              icon: Icons.download,
                              label: "SAVE",
@@ -376,7 +269,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                 ),
 
                 // ==========================
-                // BAGIAN KANAN: EMAIL FORM (RETRO STYLE)
+                // BAGIAN KANAN: QR CODE ONLY
                 // ==========================
                 Expanded(
                   flex: 1,
@@ -385,110 +278,76 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const OutlinedText(
-                            text: "SEND TO\nEMAIL",
-                            fontFamily: 'Ambitsek',
-                            fontSize: 32,
-                            textColor: Color(0xFFFFED00),
-                            outlineColor: Color(0xFFEF7D30),
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 2.0,
-                            hasShadow: true,
-                          ),
-                          const SizedBox(height: 20),
                           
-                          // RETRO FORM CONTAINER
+                          const SizedBox(height: 50), // Spacer Top
+
+                          // ------------------------------------
+                          // KOTAK QR CODE (WINDOW STYLE)
+                          // ------------------------------------
                           Container(
-                            padding: const EdgeInsets.all(4), 
+                            padding: const EdgeInsets.all(4),
+                            margin: const EdgeInsets.only(bottom: 20),
                             decoration: BoxDecoration(
                               color: const Color(0xFFC0C0C0), // Silver Win95
                               border: Border.all(width: 3, color: Colors.black),
-                              boxShadow: const [BoxShadow(color: Colors.black54, offset: Offset(8, 8), blurRadius: 0)],
+                              boxShadow: const [BoxShadow(color: Colors.black54, offset: Offset(8, 8))],
                             ),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                // WINDOWS 95 TITLE BAR
+                                // TITLE BAR
                                 Container(
+                                  width: double.infinity,
                                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                                   color: const Color(0xFF000080), // Navy Blue
                                   child: const Text(
-                                    "Message.exe",
+                                    "ScanMe.exe", 
                                     style: TextStyle(
                                       fontFamily: 'Ambitsek', 
                                       color: Colors.white, 
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold
-                                    ),
+                                      fontSize: 14
+                                    )
                                   ),
                                 ),
-                                const SizedBox(height: 15),
+                                const SizedBox(height: 10),
                                 
-                                // INPUT LABEL
-                                const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 10),
-                                  child: Text(
-                                    "Enter Recipient Email:",
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
+                                // QR IMAGE GENERATOR
+                                Container(
+                                  color: Colors.white,
+                                  padding: const EdgeInsets.all(10),
+                                  child: QrImageView(
+                                    data: qrUrl, // URL Generated Dinamis
+                                    version: QrVersions.auto,
+                                    size: 180.0,
+                                    backgroundColor: Colors.white,
+                                    gapless: false,
                                   ),
+                                ),
+                                const SizedBox(height: 10),
+                                
+                                const Text(
+                                  "SCAN TO DOWNLOAD", 
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins', 
+                                    fontWeight: FontWeight.bold, 
+                                    fontSize: 12
+                                  )
                                 ),
                                 const SizedBox(height: 5),
-
-                                // INPUT FIELD
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      border: Border(
-                                        top: BorderSide(color: Colors.grey[800]!, width: 2),
-                                        left: BorderSide(color: Colors.grey[800]!, width: 2),
-                                        bottom: BorderSide(color: Colors.grey[200]!, width: 2),
-                                        right: BorderSide(color: Colors.grey[200]!, width: 2),
-                                      ),
-                                    ),
-                                    child: TextField(
-                                      controller: _emailController,
-                                      style: const TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold),
-                                      decoration: const InputDecoration(
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                                        border: InputBorder.none,
-                                        isDense: true,
-                                        hintText: "user@example.com",
-                                      ),
-                                    ),
+                                
+                                // Tampilkan Session ID kecil untuk debug/verifikasi
+                                Text(
+                                  "ID: $sessionUuid",
+                                  style: const TextStyle(
+                                    fontFamily: 'Courier',
+                                    fontSize: 10,
+                                    color: Colors.grey
                                   ),
                                 ),
-                                const SizedBox(height: 20),
-
-                                // SEND BUTTON
-                                Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: _isSendingEmail 
-                                  ? Center(
-                                      child: Column(
-                                        children: [
-                                          const CircularProgressIndicator(color: Colors.black),
-                                          const SizedBox(height: 5),
-                                          Text(_loadingText, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                                        ],
-                                      ),
-                                    )
-                                  : RetroButton(
-                                      icon: Icons.send,
-                                      label: "SEND",
-                                      color: const Color(0xFF008080), // Teal Win95
-                                      onTap: _handleSendEmail,
-                                    ),
-                                ),
+                                const SizedBox(height: 10),
                               ],
                             ),
                           ),
+
                         ],
                       ),
                     ),
@@ -765,7 +624,12 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
       await tempFile.writeAsBytes(pngBytes);
       
       final apiService = Provider.of<ApiService>(context, listen: false);
-      bool success = await apiService.uploadFinalResult(provider.sessionUuid, tempFile.path);
+      // PENTING: Gunakan fungsi uploadFinalResult di ApiService yang sesuai
+// 1. Tampung hasil upload (berupa URL atau null)
+String? uploadUrl = await apiService.uploadFinalResult(provider.sessionUuid, tempFile.path);
+
+// 2. Tentukan sukses jika uploadUrl TIDAK null
+bool success = uploadUrl != null;
       
       if (success) {
         if(mounted) setState(() => _isUploaded = true);
