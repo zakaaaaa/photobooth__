@@ -15,7 +15,7 @@ dependencies:
   # Image processing
   image: ^4.1.7
   camera: ^0.10.5+9
-  #camera_windows: ^0.2.1+8
+  camera_windows: ^0.2.1+8
   process_run: ^1.1.0
   path_provider: ^2.1.0
   
@@ -23,7 +23,7 @@ dependencies:
   provider: ^6.1.2
   webview_windows: ^0.4.0
   # Path
-  camera_avfoundation: ^0.9.13+10
+
 
   path: ^1.9.0
   mailer: ^6.0.1

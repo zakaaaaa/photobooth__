@@ -20,7 +20,7 @@ class _PaymentPageState extends State<PaymentPage> {
   bool _isPaid = false;
   
   // Payment Data
-  final double _sessionPrice = 10000;
+  final double _sessionPrice = 500; // Pastikan harga sesuai dengan testing (misal 50000)
   Timer? _pollingTimer;
 
   // WEBVIEW CONTROLLER (Engine Browser Windows)
@@ -31,7 +31,7 @@ class _PaymentPageState extends State<PaymentPage> {
   void dispose() {
     _pollingTimer?.cancel();
     
-    // PERBAIKAN: Bungkus dispose webview dalam try-catch
+    // Bungkus dispose webview dalam try-catch
     try {
       if (_isWebviewReady) {
         _webviewController.dispose();
@@ -64,19 +64,20 @@ class _PaymentPageState extends State<PaymentPage> {
     final apiService = Provider.of<ApiService>(context, listen: false);
 
     // 1. PASTIKAN HWID SUDAH DILOAD (DINAMIS)
+    // HWID ini didapat dari PhotoProvider yang membaca Unique ID Windows
     if (provider.machineId.isEmpty) {
        await provider.initMachineId();
     }
 
-    // A. Generate UUID Baru
+    // A. Generate UUID Baru untuk sesi ini
     String newUuid = "sesi-${DateTime.now().millisecondsSinceEpoch}";
     provider.setSessionUuid(newUuid); 
 
-    // B. Start Session di Database (Default QRIS)
-    // Kita kirim paymentMethod: 'qris', amount normal, DAN HWID DINAMIS
+    // B. Start Session di Database (Mencatat sesi masuk DB)
+    // Parameter 'amount' di startSession adalah String
     bool sessionCreated = await apiService.startSession(
       newUuid, 
-      hwid: provider.machineId, // <--- WAJIB DIISI SEKARANG
+      hwid: provider.machineId, // <--- WAJIB: Dikirim untuk validasi license
       paymentMethod: 'qris', 
       amount: _sessionPrice.toStringAsFixed(0)
     );
@@ -86,35 +87,44 @@ class _PaymentPageState extends State<PaymentPage> {
       return;
     }
 
-    // C. Request URL DOKU
-    String? url = await apiService.generatePaymentLink(newUuid, _sessionPrice);
+    // C. Request URL DOKU (UPDATE PENTING DISINI)
+    // Sekarang kita wajib mengirim provider.machineId sebagai parameter ke-3
+    String? url = await apiService.generatePaymentLink(
+        newUuid, 
+        _sessionPrice, 
+        provider.machineId // <--- TAMBAHAN: Kirim HWID agar Laravel lolos validasi 'device_id'
+    );
 
     if (mounted && url != null) {
       try {
         await _webviewController.initialize();
         
+        // Listener URL untuk mendeteksi redirect sukses
         _webviewController.url.listen((currentUrl) {
            if (currentUrl.contains("google.com") || currentUrl.contains("success")) {
              _handlePaymentSuccess(); 
            }
         });
 
-        // 1. LOAD URL
+        // 1. LOAD URL DARI DOKU
         await _webviewController.loadUrl(url);
         
-        // 2. TAMPILKAN UI
+        // 2. TAMPILKAN UI WEBVIEW
         if (mounted) {
           setState(() {
             _isWebviewReady = true;
             _isLoading = false; 
           });
           
+          // Mulai cek status pembayaran ke database secara berkala
           _startPolling(newUuid);
         }
 
-        // 3. AUTO SCROLL LOGIC
+        // 3. AUTO SCROLL (Opsional, kadang webview Doku perlu di scroll sedikit)
         await Future.delayed(const Duration(seconds: 2));
-        await _webviewController.executeScript('window.scrollBy(0, 400);'); 
+        try {
+          await _webviewController.executeScript('window.scrollBy(0, 400);'); 
+        } catch (_) {}
 
       } catch (e) {
         _resetToMenu("Error WebView: Silakan install Edge WebView2 Runtime.");
@@ -124,39 +134,33 @@ class _PaymentPageState extends State<PaymentPage> {
     }
   }
 
-  // --- LOGIC BARU: BYPASS PAYMENT (DEV MODE) ---
+  // --- LOGIC BARU: BYPASS PAYMENT (DEV MODE - LONG PRESS) ---
   void _triggerBypass() async {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     final apiService = Provider.of<ApiService>(context, listen: false);
 
-    // 1. PASTIKAN HWID SUDAH DILOAD (DINAMIS)
     if (provider.machineId.isEmpty) {
        await provider.initMachineId();
     }
 
-    // 2. Buat UUID Khusus Bypass
     String bypassUuid = "bypass-${DateTime.now().millisecondsSinceEpoch}";
     
-    // 3. Feedback Loading
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text("🚀 DEV MODE: Mendaftarkan Sesi Gratis ke Server..."),
+        content: Text("🚀 DEV MODE: Mendaftarkan Sesi Gratis..."),
         duration: Duration(seconds: 2),
         backgroundColor: Colors.orange,
       ),
     );
 
-    // 4. PANGGIL API START SESSION (PENTING!)
-    // Agar server mencatat transaksi ini sebagai 'paid' dan QR Code valid.
     bool success = await apiService.startSession(
       bypassUuid, 
-      hwid: provider.machineId, // <--- WAJIB DIISI SEKARANG
-      paymentMethod: 'bypass', // Method khusus
-      amount: '0'              // Harga 0
+      hwid: provider.machineId, 
+      paymentMethod: 'bypass', 
+      amount: '0' 
     );
 
     if (success) {
-      // 5. Set UUID ke Provider & Lanjut
       provider.setSessionUuid(bypassUuid);
       _handlePaymentSuccess();
     } else {
@@ -181,6 +185,8 @@ class _PaymentPageState extends State<PaymentPage> {
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted) { timer.cancel(); return; }
       final apiService = Provider.of<ApiService>(context, listen: false);
+      
+      // Cek ke Laravel apakah status sesi sudah 'paid'
       bool paid = await apiService.checkPaymentStatus(uuid);
 
       if (paid) {
@@ -192,16 +198,12 @@ class _PaymentPageState extends State<PaymentPage> {
 
   void _handlePaymentSuccess() {
     _pollingTimer?.cancel();
-    if (_isPaid) return; // Prevent double call
+    if (_isPaid) return; 
 
     if (mounted) {
       setState(() { _isPaid = true; });
       
-      // Reset data foto lama (bersihkan list foto sebelumnya)
       Provider.of<PhotoProvider>(context, listen: false).reset();
-
-      // Note: UUID sudah diset di _initPaymentProcess atau _triggerBypass
-      // Jadi kita tidak perlu set dummy lagi disini.
 
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
@@ -215,7 +217,7 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   // =========================================================================
-  // UI BUILDER (TIDAK BERUBAH)
+  // UI BUILDER
   // =========================================================================
   @override
   Widget build(BuildContext context) {
@@ -234,19 +236,16 @@ class _PaymentPageState extends State<PaymentPage> {
               : _buildPaymentContainer(), 
           ),
 
-          // -----------------------------------------------------------
           // 3. HIDDEN BYPASS BUTTON (POJOK KIRI BAWAH)
-          // -----------------------------------------------------------
           Positioned(
             bottom: 0,
             left: 0,
             child: GestureDetector(
-              onLongPress: _triggerBypass, // <--- Panggil fungsi baru disini
-              // Container transparan ukuran 50x50 pixel
+              onLongPress: _triggerBypass,
               child: Container(
                 width: 60,
                 height: 60,
-                color: Colors.transparent, // Ubah ke Colors.red.withOpacity(0.3) untuk debug posisi
+                color: Colors.transparent, 
               ),
             ),
           ),
@@ -277,14 +276,14 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // TAMPILAN KOTAK PEMBAYARAN (EMBEDDED WEBVIEW ADA DI SINI)
+  // TAMPILAN KOTAK PEMBAYARAN (WEBVIEW CONTAINER)
   Widget _buildPaymentContainer() {
     return Container(
-      width: 500, // Lebar Kotak
-      height: 650, // Tinggi Kotak
+      width: 500, 
+      height: 650, 
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFFC0C0C0), // Warna Windows 95
+        color: const Color(0xFFC0C0C0), 
         border: Border.all(width: 3, color: Colors.black),
         boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(10, 10), blurRadius: 0)],
       ),
@@ -293,7 +292,7 @@ class _PaymentPageState extends State<PaymentPage> {
           // HEADER KOTAK
           Container(
             height: 35,
-            color: const Color(0xFF0000AA), // Biru Windows
+            color: const Color(0xFF0000AA),
             child: const Center(
               child: Text("DOKU PAYMENT GATEWAY", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
             ),
@@ -305,7 +304,7 @@ class _PaymentPageState extends State<PaymentPage> {
               margin: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: Colors.white,
-                border: Border.all(color: Colors.black54, width: 2), // Efek inset
+                border: Border.all(color: Colors.black54, width: 2), 
               ),
               child: _isPaid 
                 ? _buildSuccessView()
@@ -318,7 +317,7 @@ class _PaymentPageState extends State<PaymentPage> {
                           Text("Connecting to DOKU...")
                         ],
                       ))
-                    : Webview(_webviewController), // <--- INI WIDGET EMBEDNYA
+                    : Webview(_webviewController), 
             ),
           ),
 
@@ -358,10 +357,9 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 }
 
-// =========================================================================
-// WIDGET TAMBAHAN (Sama seperti sebelumnya)
-// =========================================================================
-
+// ... Widget PixelCard dan OutlinedText tetap sama seperti sebelumnya ...
+// Silakan paste ulang widget PixelCard dan OutlinedText di bawah sini jika perlu, 
+// tapi bagian logic utamanya ada di atas.
 class PixelCard extends StatefulWidget {
   final String title;
   final String imagePath; 

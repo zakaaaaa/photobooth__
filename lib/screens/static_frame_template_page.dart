@@ -31,20 +31,7 @@ class StaticFrameTemplatePage extends StatelessWidget {
   // DATA TEMPLATES
   final List<FrameTemplate> templates = [
     // FRAME 1 (Strip)
-    FrameTemplate(
-      id: 'frame_1',
-      assetPath: 'assets/frames/frame_01.png', 
-      photoCount: 3, 
-      layout: const FrameLayout(
-        topPadding: 92,
-        bottomPadding: 18,
-        leftPadding: 15,
-        rightPadding: 15,
-        horizontalSpacing: 35,
-        verticalSpacing: 26,
-        childAspectRatio: 1.2,
-      ),
-    ),
+
     // FRAME 2 (Strip)
     FrameTemplate(
       id: 'frame_2',
@@ -79,20 +66,7 @@ class StaticFrameTemplatePage extends StatelessWidget {
     // ===============================================
     // FRAME 4 (TAROT) - UKURAN BESAR 1080x1920
     // ===============================================
-    FrameTemplate(
-      id: 'frame_4',
-      assetPath: 'assets/frames/frame_04.png', 
-      photoCount: 4, 
-      layout: const FrameLayout(
-        topPadding: 35,
-        leftPadding: 10,
-        rightPadding: 5,
-        bottomPadding: 40,
-        horizontalSpacing: 5,
-        verticalSpacing: 13,
-        childAspectRatio: 1.0,
-      ),
-    ),
+    
   ];
 
   @override

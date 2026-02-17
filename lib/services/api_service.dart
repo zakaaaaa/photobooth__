@@ -1,32 +1,40 @@
 import 'dart:convert';
-import 'dart:io'; // Untuk File
+import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // Base URL (Pastikan IP VPS benar)
+  // Base URL sesuai port 8080 yang sudah kita buka di Nginx
   final String baseUrl = "http://168.231.125.203:8080/api"; 
 
   // =================================================================
   // 1. PAYMENT INTEGRATION
   // =================================================================
 
-  Future<String?> generatePaymentLink(String sessionUuid, double amount) async {
+  Future<String?> generatePaymentLink(String sessionUuid, double amount, String hwid) async {
     try {
       final uri = Uri.parse("$baseUrl/payment/generate"); 
       print("💰 Requesting QRIS: $uri"); 
 
       final response = await http.post(
         uri,
-        headers: {"Accept": "application/json"},
-        body: {
-          'session_uuid': sessionUuid,
-          'amount': amount.toStringAsFixed(0),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
         },
+        body: jsonEncode({
+          'device_id': hwid, // Wajib dikirim agar lolos validasi Laravel
+          'session_uuid': sessionUuid,
+          'amount': amount.toInt(), // Mengirim integer sesuai ekspektasi Laravel
+        }),
       );
+
+      print("📡 Payment Response: ${response.statusCode} - ${response.body}");
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['qr_content']; 
+        return data['qr_content']; // URL dari Doku
+      } else {
+        print("❌ Server rejected payment request: ${response.body}");
       }
     } catch (e) {
       print("❌ Error Payment Connection: $e");
@@ -39,8 +47,11 @@ class ApiService {
       final uri = Uri.parse("$baseUrl/payment/check-status");
       final response = await http.post(
         uri,
-        headers: {"Accept": "application/json"},
-        body: {'session_uuid': sessionUuid},
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: jsonEncode({'session_uuid': sessionUuid}),
       );
 
       if (response.statusCode == 200) {
@@ -57,7 +68,6 @@ class ApiService {
   // 2. SESSION & UPLOAD
   // =================================================================
 
-  // 1. Cek License / Login
   Future<bool> checkLicense(String hwid) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/license/check");
@@ -65,7 +75,7 @@ class ApiService {
       
       final response = await http.post(
         uri,
-        headers: {"Content-Type": "application/json"},
+        headers: {"Content-Type": "application/json", "Accept": "application/json"},
         body: jsonEncode({'hwid': hwid}),
       );
 
@@ -77,25 +87,24 @@ class ApiService {
     }
   }
 
-  // 2. Start Session (SUDAH DINAMIS)
-  // SEKARANG WAJIB MENGIRIM PARAMETER 'hwid'
   Future<bool> startSession(String uuid, {
-    required String hwid, // <--- WAJIB DIISI (Dinamis dari Provider)
+    required String hwid, 
     String paymentMethod = 'qris', 
     String amount = '0'
   }) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/start-session");
-      print("🚀 Start Session ($paymentMethod) HWID: $hwid"); // Debugging HWID
+      print("🚀 Start Session ($paymentMethod) HWID: $hwid");
 
       final response = await http.post(
         uri,
-        body: {
-            'hwid': hwid, // <--- Menggunakan variable, bukan hardcode lagi
+        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        body: jsonEncode({
+            'hwid': hwid,
             'transaction_code': uuid,
             'amount': amount,
             'payment_method': paymentMethod,
-        },
+        }),
       );
       
       print("🚀 Start Response: ${response.statusCode} - ${response.body}");
@@ -106,7 +115,7 @@ class ApiService {
     }
   }
 
-  // 3. Upload Foto Mentah (Saat jepret)
+  // Untuk Upload tetap menggunakan MultipartRequest (bukan JSON)
   Future<bool> uploadPhoto(String uuid, String filePath) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/upload");
@@ -123,7 +132,6 @@ class ApiService {
     }
   }
 
-  // 4. Upload Final Result (Frame yang sudah jadi)
   Future<String?> uploadFinalResult(String sessionUuid, String filePath) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/upload-final");
