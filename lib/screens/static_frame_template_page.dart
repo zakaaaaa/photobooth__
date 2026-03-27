@@ -201,14 +201,6 @@ class _StaticFrameTemplatePageState extends State<StaticFrameTemplatePage> {
                             ? _buildEmpty()
                             : _buildGrid(),
               ),
-
-              Padding(
-                padding: const EdgeInsets.only(bottom: 40, top: 20),
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Image.asset("assets/images/back.png", width: 200, height: 80),
-                ),
-              ),
             ],
           ),
         ],

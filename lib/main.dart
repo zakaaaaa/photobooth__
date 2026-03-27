@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:photobooth_app/providers/photo_provider.dart';
+import 'package:photobooth_app/screens/diagnostic_page.dart';
 import 'package:photobooth_app/screens/splash_screen.dart';
 import 'package:photobooth_app/services/api_service.dart';
 
 // ── Global navigator key — dipakai untuk navigasi dari mana saja ──
-// tanpa bergantung pada BuildContext yang mungkin sudah tidak valid
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
@@ -25,29 +25,24 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    // Set onSessionExpired setelah provider tersedia
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupSessionExpiredCallback();
     });
   }
 
   void _setupSessionExpiredCallback() {
-    // Ambil provider via navigatorKey context — selalu valid
     final context = navigatorKey.currentContext;
     if (context == null) return;
 
     Provider.of<PhotoProvider>(context, listen: false).onSessionExpired = () {
-      // Gunakan navigatorKey — tidak bergantung pada context screen manapun
       final nav = navigatorKey.currentState;
       if (nav == null) return;
 
-      // Reset provider
       final providerCtx = navigatorKey.currentContext;
       if (providerCtx != null) {
         Provider.of<PhotoProvider>(providerCtx, listen: false).reset();
       }
 
-      // Navigasi ke SplashScreen, hapus semua route
       nav.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const SplashScreen()),
         (route) => false,
@@ -67,27 +62,27 @@ class _MyAppState extends State<MyApp> {
       child: MaterialApp(
         title: 'Photobooth App',
         debugShowCheckedModeBanner: false,
-        navigatorKey: navigatorKey, // ← global key
+        navigatorKey: navigatorKey,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
           fontFamily: 'Poppins',
         ),
         builder: (context, child) {
-          // Setup callback di sini karena provider sudah tersedia di context ini
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _setupSessionExpiredCallback();
           });
           return _TimerBadgeOverlay(child: child!);
         },
-        home: const SplashScreen(),
+        // ✅ DiagnosticPage sebagai halaman pertama
+        home: const DiagnosticPage(),
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────
-// Hanya timer badge visual — navigasi ditangani via navigatorKey
+// Timer badge overlay — tidak berubah
 // ─────────────────────────────────────────────────────────
 class _TimerBadgeOverlay extends StatelessWidget {
   final Widget child;

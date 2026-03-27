@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'frame_selection_page.dart'; // Pastikan file ini nanti dibuat/ada
+import 'static_frame_template_page.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -66,7 +66,7 @@ class HomeScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const FrameSelectionPage(),
+                        builder: (context) => StaticFrameTemplatePage(),
                       ),
                     );
                   },

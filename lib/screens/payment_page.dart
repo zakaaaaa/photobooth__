@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/photo_provider.dart';
 import '../services/api_service.dart';
-import 'frame_selection_page.dart';
+import 'static_frame_template_page.dart';
 
 class PaymentPage extends StatefulWidget {
   const PaymentPage({super.key});
@@ -190,7 +190,7 @@ class _PaymentPageState extends State<PaymentPage> {
         if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const FrameSelectionPage()),
+            MaterialPageRoute(builder: (_) => StaticFrameTemplatePage()),
           );
         }
       });
