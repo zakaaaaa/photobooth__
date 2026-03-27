@@ -135,12 +135,184 @@ class _PaymentPageState extends State<PaymentPage> {
     try {
       await _webviewController.initialize();
       await _webviewController.setBackgroundColor(Colors.white);
+
+      // Listen for page load completion to inject JS
+      _webviewController.loadingState.listen((state) {
+        if (state == LoadingState.navigationCompleted) {
+          _injectAutoSelectQrisScript();
+        }
+      });
+
       await _webviewController.loadUrl(url);
       if (mounted) {
         setState(() => _isWebViewReady = true);
       }
     } catch (e) {
       print("❌ Error WebView: $e");
+    }
+  }
+
+  /// Inject JavaScript to auto-select QRIS payment on DOKU checkout page
+  /// and scroll to the QR code
+  void _injectAutoSelectQrisScript() async {
+    const jsCode = '''
+      (function() {
+        var qrisClicked = false;
+
+        function simulateClick(el) {
+          // Dispatch full mouse event sequence for frameworks
+          ['mousedown', 'mouseup', 'click'].forEach(function(evtType) {
+            el.dispatchEvent(new MouseEvent(evtType, {
+              bubbles: true, cancelable: true, view: window
+            }));
+          });
+        }
+
+        function trySelectQris(attempt) {
+          if (attempt > 30 || qrisClicked) return;
+
+          // XPath: find any element whose text contains "QRIS" (case-insensitive)
+          var xpathResult = document.evaluate(
+            "//*[contains(translate(text(),'qris','QRIS'),'QRIS')]",
+            document, null,
+            XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null
+          );
+
+          for (var i = 0; i < xpathResult.snapshotLength; i++) {
+            var node = xpathResult.snapshotItem(i);
+            // Walk up from the text node to find clickable parent
+            var target = node;
+            for (var depth = 0; depth < 8; depth++) {
+              if (!target) break;
+              var tag = (target.tagName || '').toUpperCase();
+              var role = (target.getAttribute && target.getAttribute('role')) || '';
+              var cursor = window.getComputedStyle(target).cursor;
+
+              // Check if this element is clickable
+              if (tag === 'BUTTON' || tag === 'A' || tag === 'LI' ||
+                  role === 'button' || role === 'tab' || role === 'option' ||
+                  cursor === 'pointer' ||
+                  target.onclick != null ||
+                  (target.className && target.className.toString().match(/channel|method|option|item|card|tab|accordion/i))) {
+                simulateClick(target);
+                qrisClicked = true;
+                console.log('[AutoQRIS] Clicked QRIS element:', tag, target.className);
+                setTimeout(function() { scrollToQrCode(0); }, 2000);
+                return;
+              }
+              target = target.parentElement;
+            }
+          }
+
+          // Fallback: querySelector approach for DOKU-specific selectors
+          var fallbackSelectors = [
+            '[data-channel*="qris" i]',
+            '[data-channel*="QRIS"]',
+            '[data-payment*="qris" i]',
+            '[data-value*="qris" i]',
+            '[id*="qris" i]',
+            '[class*="qris" i]',
+            '[class*="channel" i]',
+          ];
+          for (var s = 0; s < fallbackSelectors.length; s++) {
+            try {
+              var els = document.querySelectorAll(fallbackSelectors[s]);
+              for (var j = 0; j < els.length; j++) {
+                var txt = (els[j].textContent || '').toUpperCase();
+                if (txt.indexOf('QRIS') !== -1) {
+                  simulateClick(els[j]);
+                  qrisClicked = true;
+                  console.log('[AutoQRIS] Fallback clicked:', els[j].tagName, els[j].className);
+                  setTimeout(function() { scrollToQrCode(0); }, 2000);
+                  return;
+                }
+              }
+            } catch(e) {}
+          }
+
+          // Last resort: click any element with QRIS in its text
+          if (!qrisClicked) {
+            var all = document.querySelectorAll('*');
+            for (var k = 0; k < all.length; k++) {
+              var el = all[k];
+              // Only check direct text content (not children)
+              var directText = '';
+              for (var c = 0; c < el.childNodes.length; c++) {
+                if (el.childNodes[c].nodeType === 3) {
+                  directText += el.childNodes[c].textContent;
+                }
+              }
+              if (directText.trim().toUpperCase().indexOf('QRIS') !== -1) {
+                // Walk up to find clickable parent
+                var clickTarget = el;
+                while (clickTarget && clickTarget !== document.body) {
+                  var cs = window.getComputedStyle(clickTarget).cursor;
+                  if (cs === 'pointer') {
+                    simulateClick(clickTarget);
+                    qrisClicked = true;
+                    console.log('[AutoQRIS] Last-resort clicked:', clickTarget.tagName);
+                    setTimeout(function() { scrollToQrCode(0); }, 2000);
+                    return;
+                  }
+                  clickTarget = clickTarget.parentElement;
+                }
+                // If no pointer parent found, just click the element itself
+                simulateClick(el);
+                qrisClicked = true;
+                console.log('[AutoQRIS] Direct clicked:', el.tagName);
+                setTimeout(function() { scrollToQrCode(0); }, 2000);
+                return;
+              }
+            }
+          }
+
+          // Retry
+          setTimeout(function() { trySelectQris(attempt + 1); }, 500);
+        }
+
+        function scrollToQrCode(attempt) {
+          if (attempt > 30) return;
+          var qrSelectors = [
+            'img[src*="qr"]', 'img[alt*="qr" i]', 'img[alt*="QRIS" i]',
+            'canvas', '[class*="qr-code" i]', '[class*="qrcode" i]',
+            '[id*="qr" i]', 'img[src*="payment"]',
+            'img[src*="doku"]', 'img[src*="shopeepay"]',
+          ];
+          var qrElement = null;
+          for (var s = 0; s < qrSelectors.length; s++) {
+            try {
+              qrElement = document.querySelector(qrSelectors[s]);
+              if (qrElement) break;
+            } catch(e) {}
+          }
+          if (qrElement) {
+            qrElement.scrollIntoView({behavior: 'smooth', block: 'center'});
+          } else {
+            setTimeout(function() { scrollToQrCode(attempt + 1); }, 500);
+          }
+        }
+
+        // Also observe DOM mutations for dynamically loaded content
+        var observer = new MutationObserver(function(mutations) {
+          if (!qrisClicked) {
+            trySelectQris(0);
+          } else {
+            observer.disconnect();
+          }
+        });
+        observer.observe(document.body || document.documentElement, {
+          childList: true, subtree: true
+        });
+
+        // Start initial attempt after delay
+        setTimeout(function() { trySelectQris(0); }, 1500);
+      })();
+    ''';
+
+    try {
+      await _webviewController.executeScript(jsCode);
+    } catch (e) {
+      print("⚠️ JS injection error: \$e");
     }
   }
 
