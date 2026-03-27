@@ -55,7 +55,7 @@ class _CameraPageState extends State<CameraPage> {
   // ── FIX FILTER: simpan filter yang dipilih sebelum sesi dimulai ──
   PhotoFilter _lockedFilter = PhotoFilter.none;
 
-  static const String _backendUrl = 'http://168.231.125.203:8181';
+  static const String _backendUrl = 'http://168.231.125.203:8181/api';
 
   // ── Filter matrices ──
   static const ColorFilter _sepiaMatrix = ColorFilter.matrix(<double>[

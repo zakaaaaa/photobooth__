@@ -45,7 +45,7 @@ class _DiagnosticPageState extends State<DiagnosticPage>
   late Animation<double> _fadeAnimation;
   late AnimationController _pulseController;
 
-  static const String _backendUrl = 'http://168.231.125.203:8181';
+  static const String _backendUrl = 'https://api.amandya.tech';
 
   @override
   void initState() {
@@ -285,10 +285,12 @@ class _DiagnosticPageState extends State<DiagnosticPage>
           .timeout(const Duration(seconds: 8));
 
       if (mounted) {
-        if (response.statusCode == 200 || response.statusCode == 422) {
+        if (response.statusCode == 200 ||
+            response.statusCode == 422 ||
+            response.statusCode == 404) {
           setState(() {
             _serverStatus = _CheckStatus.success;
-            _serverMessage = 'Server terhubung (${response.statusCode})';
+            _serverMessage = 'Server terhubung (OK)';
           });
         } else {
           setState(() {

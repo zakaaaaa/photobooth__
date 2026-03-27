@@ -3,7 +3,8 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart' show compute, consolidateHttpClientResponseBytes;
+import 'package:flutter/foundation.dart'
+    show compute, consolidateHttpClientResponseBytes;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -25,13 +26,15 @@ import 'package:photobooth_app/screens/splash_screen.dart';
 // ── FIX UTAMA: tidak blok UI thread ──
 // ============================================================
 Uint8List _encodePngInIsolate(Map<String, dynamic> args) {
-  final int width     = args['width']  as int;
-  final int height    = args['height'] as int;
-  final Uint8List raw = args['raw']    as Uint8List;
+  final int width = args['width'] as int;
+  final int height = args['height'] as int;
+  final Uint8List raw = args['raw'] as Uint8List;
 
   final image = img.Image.fromBytes(
-    width: width, height: height,
-    bytes: raw.buffer, order: img.ChannelOrder.rgba,
+    width: width,
+    height: height,
+    bytes: raw.buffer,
+    order: img.ChannelOrder.rgba,
   );
   return Uint8List.fromList(img.encodePng(image));
 }
@@ -47,33 +50,34 @@ class PreviewPrintPage extends StatefulWidget {
 }
 
 class _PreviewPrintPageState extends State<PreviewPrintPage> {
-  final double previewTextTopMargin  = 80.0;
+  final double previewTextTopMargin = 80.0;
   final double previewTextLeftMargin = 0.0;
-  final double previewTextSize       = 40.0;
-  final double cardRowTopMargin      = 80.0;
-  final double cardWidth             = 242.0;
-  final double cardHeight            = 275.0;
-  final double cardSpacing           = 20.0;
+  final double previewTextSize = 40.0;
+  final double cardRowTopMargin = 80.0;
+  final double cardWidth = 242.0;
+  final double cardHeight = 275.0;
+  final double cardSpacing = 20.0;
 
-  static const String _frontendUrl = 'http://168.231.125.203:3333';
-  static const String _backendUrl  = 'http://168.231.125.203:8181';
+  static const String _frontendUrl = 'https://app.amandya.tech';
+  static const String _backendUrl = 'https://api.amandya.tech';
 
   Future<void> _printPhoto(BuildContext context) async {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     if (provider.finalImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please wait, preparing photo...")));
+          const SnackBar(content: Text("Please wait, preparing photo...")));
       return;
     }
 
     showDialog(
-      context: context, barrierDismissible: false,
+      context: context,
+      barrierDismissible: false,
       builder: (_) => const Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           CircularProgressIndicator(color: Colors.white),
           SizedBox(height: 10),
           Text("Sending to Printer...",
-            style: TextStyle(color: Colors.white, fontFamily: 'Ambitsek')),
+              style: TextStyle(color: Colors.white, fontFamily: 'Ambitsek')),
         ]),
       ),
     );
@@ -81,18 +85,18 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
     bool printSuccess = false;
 
     try {
-      const double width4R  = 4.0 * 72.0;
+      const double width4R = 4.0 * 72.0;
       const double height4R = 6.0 * 72.0;
       final pdfFormat = PdfPageFormat(width4R, height4R, marginAll: 0);
 
       Future<Uint8List> generateDoc(PdfPageFormat format) async {
-        final doc   = pw.Document();
+        final doc = pw.Document();
         final image = pw.MemoryImage(provider.finalImageBytes!);
         doc.addPage(pw.Page(
           pageFormat: format,
           build: (_) => pw.FullPage(
-            ignoreMargins: true,
-            child: pw.Image(image, fit: pw.BoxFit.cover, dpi: 300)),
+              ignoreMargins: true,
+              child: pw.Image(image, fit: pw.BoxFit.cover, dpi: 300)),
         ));
         return doc.save();
       }
@@ -101,12 +105,15 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
       try {
         final printers = await Printing.listPrinters();
         targetPrinter = printers.firstWhere(
-          (p) => p.name.toLowerCase().contains("epson") ||
-                 p.name.toLowerCase().contains("d500"),
-          orElse: () => printers.firstWhere(
-            (p) => p.isDefault, orElse: () => printers.first),
+          (p) =>
+              p.name.toLowerCase().contains("epson") ||
+              p.name.toLowerCase().contains("d500"),
+          orElse: () => printers.firstWhere((p) => p.isDefault,
+              orElse: () => printers.first),
         );
-      } catch (e) { debugPrint("⚠️ Gagal scan printer: $e"); }
+      } catch (e) {
+        debugPrint("⚠️ Gagal scan printer: $e");
+      }
 
       if (targetPrinter != null && targetPrinter.isAvailable) {
         printSuccess = await Printing.directPrintPdf(
@@ -124,13 +131,13 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
         if (context.mounted) {
           await Printing.layoutPdf(
             onLayout: (_) async {
-              final doc   = pw.Document();
+              final doc = pw.Document();
               final image = pw.MemoryImage(provider.finalImageBytes!);
               doc.addPage(pw.Page(
                 pageFormat: PdfPageFormat(4.0 * 72, 6.0 * 72, marginAll: 0),
                 build: (_) => pw.FullPage(
-                  ignoreMargins: true,
-                  child: pw.Image(image, fit: pw.BoxFit.cover, dpi: 300)),
+                    ignoreMargins: true,
+                    child: pw.Image(image, fit: pw.BoxFit.cover, dpi: 300)),
               ));
               return doc.save();
             },
@@ -139,8 +146,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
         }
       } else {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text("✅ Sent to Printer!"),
               backgroundColor: Colors.green));
         }
@@ -152,18 +158,17 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     if (provider.finalImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please wait, preparing photo...")));
+          const SnackBar(content: Text("Please wait, preparing photo...")));
       return;
     }
     try {
-      final dir       = await getApplicationDocumentsDirectory();
+      final dir = await getApplicationDocumentsDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName  = 'Photobooth_Result_$timestamp.png';
-      final savePath  = '${dir.path}/$fileName';
+      final fileName = 'Photobooth_Result_$timestamp.png';
+      final savePath = '${dir.path}/$fileName';
       await File(savePath).writeAsBytes(provider.finalImageBytes!);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text("✅ Saved: $fileName"),
             backgroundColor: Colors.blueAccent));
       }
@@ -184,7 +189,8 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
         children: [
           Image.asset('assets/images/splash_background.png', fit: BoxFit.cover),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 30.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 40.0, vertical: 30.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -196,18 +202,19 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                     children: [
                       Padding(
                         padding: EdgeInsets.only(
-                          top: previewTextTopMargin,
-                          left: previewTextLeftMargin,
-                          bottom: cardRowTopMargin),
+                            top: previewTextTopMargin,
+                            left: previewTextLeftMargin,
+                            bottom: cardRowTopMargin),
                         child: Text("Preview & Print",
-                          style: TextStyle(
-                            fontFamily: 'Ambitsek',
-                            fontSize: previewTextSize,
-                            color: Colors.white,
-                            letterSpacing: 2.0,
-                            shadows: const [
-                              Shadow(offset: Offset(3, 3), color: Colors.black)
-                            ])),
+                            style: TextStyle(
+                                fontFamily: 'Ambitsek',
+                                fontSize: previewTextSize,
+                                color: Colors.white,
+                                letterSpacing: 2.0,
+                                shadows: const [
+                                  Shadow(
+                                      offset: Offset(3, 3), color: Colors.black)
+                                ])),
                       ),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.start,
@@ -216,24 +223,30 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                             label: "Photo",
                             assetPath: "assets/images/photo.png",
                             colorAccent: Colors.blueAccent,
-                            width: cardWidth, height: cardHeight,
-                            onTap: () => _navigateTo(context, const _PhotoPreviewPage()),
+                            width: cardWidth,
+                            height: cardHeight,
+                            onTap: () =>
+                                _navigateTo(context, const _PhotoPreviewPage()),
                           ),
                           SizedBox(width: cardSpacing),
                           RetroInteractiveCard(
                             label: "GIF",
                             assetPath: "assets/images/gif.png",
                             colorAccent: Colors.purpleAccent,
-                            width: cardWidth, height: cardHeight,
-                            onTap: () => _navigateTo(context, const _GifPreviewPage()),
+                            width: cardWidth,
+                            height: cardHeight,
+                            onTap: () =>
+                                _navigateTo(context, const _GifPreviewPage()),
                           ),
                           SizedBox(width: cardSpacing),
                           RetroInteractiveCard(
                             label: "Video",
                             assetPath: "assets/images/vid.png",
                             colorAccent: Colors.orangeAccent,
-                            width: cardWidth, height: cardHeight,
-                            onTap: () => _navigateTo(context, const _VideoPreviewPage()),
+                            width: cardWidth,
+                            height: cardHeight,
+                            onTap: () =>
+                                _navigateTo(context, const _VideoPreviewPage()),
                           ),
                         ],
                       ),
@@ -241,22 +254,30 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                       Row(
                         children: [
                           RetroButton(
-                            icon: Icons.home, label: "HOME", color: Colors.redAccent,
+                            icon: Icons.home,
+                            label: "HOME",
+                            color: Colors.redAccent,
                             onTap: () {
-                              Provider.of<PhotoProvider>(context, listen: false).reset();
+                              Provider.of<PhotoProvider>(context, listen: false)
+                                  .reset();
                               Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute(builder: (_) => const SplashScreen()),
-                                (r) => false);
+                                  MaterialPageRoute(
+                                      builder: (_) => const SplashScreen()),
+                                  (r) => false);
                             },
                           ),
                           const SizedBox(width: 20),
                           RetroButton(
-                            icon: Icons.download, label: "SAVE", color: Colors.blue,
-                            onTap: () => _downloadPhotoToLocal(context)),
+                              icon: Icons.download,
+                              label: "SAVE",
+                              color: Colors.blue,
+                              onTap: () => _downloadPhotoToLocal(context)),
                           const SizedBox(width: 20),
                           RetroButton(
-                            icon: Icons.print, label: "PRINT", color: Colors.green,
-                            onTap: () => _printPhoto(context)),
+                              icon: Icons.print,
+                              label: "PRINT",
+                              color: Colors.green,
+                              onTap: () => _printPhoto(context)),
                         ],
                       ),
                     ],
@@ -276,45 +297,48 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                             padding: const EdgeInsets.all(4),
                             margin: const EdgeInsets.only(bottom: 20),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFC0C0C0),
-                              border: Border.all(width: 3, color: Colors.black),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black54, offset: Offset(8, 8))
-                              ]),
+                                color: const Color(0xFFC0C0C0),
+                                border:
+                                    Border.all(width: 3, color: Colors.black),
+                                boxShadow: const [
+                                  BoxShadow(
+                                      color: Colors.black54,
+                                      offset: Offset(8, 8))
+                                ]),
                             child: Column(
                               children: [
                                 Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 4, horizontal: 8),
-                                  color: const Color(0xFF000080),
-                                  child: const Text("ScanMe.exe",
-                                    style: TextStyle(
-                                      fontFamily: 'Ambitsek',
-                                      color: Colors.white,
-                                      fontSize: 14))),
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 4, horizontal: 8),
+                                    color: const Color(0xFF000080),
+                                    child: const Text("ScanMe.exe",
+                                        style: TextStyle(
+                                            fontFamily: 'Ambitsek',
+                                            color: Colors.white,
+                                            fontSize: 14))),
                                 const SizedBox(height: 10),
                                 Container(
-                                  color: Colors.white,
-                                  padding: const EdgeInsets.all(10),
-                                  child: QrImageView(
-                                    data: qrUrl,
-                                    version: QrVersions.auto,
-                                    size: 180.0,
-                                    backgroundColor: Colors.white,
-                                    gapless: false)),
+                                    color: Colors.white,
+                                    padding: const EdgeInsets.all(10),
+                                    child: QrImageView(
+                                        data: qrUrl,
+                                        version: QrVersions.auto,
+                                        size: 180.0,
+                                        backgroundColor: Colors.white,
+                                        gapless: false)),
                                 const SizedBox(height: 10),
                                 const Text("SCAN TO DOWNLOAD",
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12)),
+                                    style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12)),
                                 const SizedBox(height: 5),
                                 Text("ID: $sessionUuid",
-                                  style: const TextStyle(
-                                    fontFamily: 'Courier',
-                                    fontSize: 10,
-                                    color: Colors.grey)),
+                                    style: const TextStyle(
+                                        fontFamily: 'Courier',
+                                        fontSize: 10,
+                                        color: Colors.grey)),
                                 const SizedBox(height: 10),
                               ],
                             ),
@@ -346,10 +370,15 @@ class RetroInteractiveCard extends StatefulWidget {
   final VoidCallback onTap;
   const RetroInteractiveCard({
     super.key,
-    required this.label, required this.assetPath, required this.colorAccent,
-    required this.width, required this.height, required this.onTap,
+    required this.label,
+    required this.assetPath,
+    required this.colorAccent,
+    required this.width,
+    required this.height,
+    required this.onTap,
   });
-  @override State<RetroInteractiveCard> createState() => _RetroInteractiveCardState();
+  @override
+  State<RetroInteractiveCard> createState() => _RetroInteractiveCardState();
 }
 
 class _RetroInteractiveCardState extends State<RetroInteractiveCard> {
@@ -358,39 +387,51 @@ class _RetroInteractiveCardState extends State<RetroInteractiveCard> {
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
-      onExit:  (_) => setState(() => _isHovered = false),
+      onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTapDown:   (_) => setState(() => _isPressed = true),
-        onTapUp:     (_) { setState(() => _isPressed = false); widget.onTap(); },
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) {
+          setState(() => _isPressed = false);
+          widget.onTap();
+        },
         onTapCancel: () => setState(() => _isPressed = false),
         child: AnimatedScale(
           scale: _isPressed ? 0.95 : (_isHovered ? 1.05 : 1.0),
           duration: const Duration(milliseconds: 100),
           child: Container(
-            width: widget.width, height: widget.height,
+            width: widget.width,
+            height: widget.height,
             decoration: BoxDecoration(
-              color: const Color(0xFFC0C0C0),
-              border: Border.all(
-                width: 3,
-                color: _isHovered ? widget.colorAccent : Colors.black),
-              boxShadow: _isPressed
-                  ? []
-                  : const [BoxShadow(
-                      color: Colors.black54, offset: Offset(6, 6), blurRadius: 0)]),
+                color: const Color(0xFFC0C0C0),
+                border: Border.all(
+                    width: 3,
+                    color: _isHovered ? widget.colorAccent : Colors.black),
+                boxShadow: _isPressed
+                    ? []
+                    : const [
+                        BoxShadow(
+                            color: Colors.black54,
+                            offset: Offset(6, 6),
+                            blurRadius: 0)
+                      ]),
             child: Column(children: [
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                color: const Color(0xFF0000AA),
-                child: Text(widget.label,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: 'Ambitsek', color: Colors.white,
-                    fontSize: 18, letterSpacing: 1.5))),
-              Expanded(child: Padding(
-                padding: const EdgeInsets.all(15.0),
-                child: Image.asset(widget.assetPath, fit: BoxFit.contain))),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  color: const Color(0xFF0000AA),
+                  child: Text(widget.label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontFamily: 'Ambitsek',
+                          color: Colors.white,
+                          fontSize: 18,
+                          letterSpacing: 1.5))),
+              Expanded(
+                  child: Padding(
+                      padding: const EdgeInsets.all(15.0),
+                      child:
+                          Image.asset(widget.assetPath, fit: BoxFit.contain))),
             ]),
           ),
         ),
@@ -405,10 +446,14 @@ class RetroButton extends StatefulWidget {
   final Color color;
   final VoidCallback onTap;
   const RetroButton({
-    super.key, this.icon,
-    required this.label, required this.color, required this.onTap,
+    super.key,
+    this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
   });
-  @override State<RetroButton> createState() => _RetroButtonState();
+  @override
+  State<RetroButton> createState() => _RetroButtonState();
 }
 
 class _RetroButtonState extends State<RetroButton> {
@@ -417,11 +462,14 @@ class _RetroButtonState extends State<RetroButton> {
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
-      onExit:  (_) => setState(() => _isHovered = false),
+      onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTapDown:   (_) => setState(() => _isPressed = true),
-        onTapUp:     (_) { setState(() => _isPressed = false); widget.onTap(); },
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) {
+          setState(() => _isPressed = false);
+          widget.onTap();
+        },
         onTapCancel: () => setState(() => _isPressed = false),
         child: AnimatedScale(
           scale: _isPressed ? 0.95 : (_isHovered ? 1.05 : 1.0),
@@ -429,24 +477,30 @@ class _RetroButtonState extends State<RetroButton> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
-              color: widget.color,
-              border: const Border(
-                top:    BorderSide(color: Colors.white, width: 3),
-                left:   BorderSide(color: Colors.white, width: 3),
-                bottom: BorderSide(color: Colors.black, width: 3),
-                right:  BorderSide(color: Colors.black, width: 3)),
-              boxShadow: _isPressed
-                  ? []
-                  : const [BoxShadow(color: Colors.black54, offset: Offset(2, 2))]),
+                color: widget.color,
+                border: const Border(
+                    top: BorderSide(color: Colors.white, width: 3),
+                    left: BorderSide(color: Colors.white, width: 3),
+                    bottom: BorderSide(color: Colors.black, width: 3),
+                    right: BorderSide(color: Colors.black, width: 3)),
+                boxShadow: _isPressed
+                    ? []
+                    : const [
+                        BoxShadow(color: Colors.black54, offset: Offset(2, 2))
+                      ]),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               if (widget.icon != null) ...[
                 Icon(widget.icon, color: Colors.white, size: 20),
                 const SizedBox(width: 8),
               ],
               Text(widget.label,
-                style: const TextStyle(
-                  fontFamily: 'Ambitsek', color: Colors.white, fontSize: 20,
-                  shadows: [Shadow(offset: Offset(1, 1), color: Colors.black)])),
+                  style: const TextStyle(
+                      fontFamily: 'Ambitsek',
+                      color: Colors.white,
+                      fontSize: 20,
+                      shadows: [
+                        Shadow(offset: Offset(1, 1), color: Colors.black)
+                      ])),
             ]),
           ),
         ),
@@ -461,26 +515,28 @@ class _RetroButtonState extends State<RetroButton> {
 // ============================================================
 class _PhotoPreviewPage extends StatefulWidget {
   const _PhotoPreviewPage();
-  @override State<_PhotoPreviewPage> createState() => _PhotoPreviewPageState();
+  @override
+  State<_PhotoPreviewPage> createState() => _PhotoPreviewPageState();
 }
 
 class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
   final GlobalKey _globalKey = GlobalKey();
-  bool   _isUploading  = false;
-  bool   _isUploaded   = false;
+  bool _isUploading = false;
+  bool _isUploaded = false;
   String _uploadStatus = '';
 
-  static const String _backendUrl = 'http://168.231.125.203:8181';
+  static const String _backendUrl = 'https://api.amandya.tech';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _waitForFrameAndCapture());
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _waitForFrameAndCapture());
   }
 
   Future<void> _waitForFrameAndCapture() async {
-    final provider  = Provider.of<PhotoProvider>(context, listen: false);
-    final frameUrl  = provider.selectedFrameAsset;
+    final provider = Provider.of<PhotoProvider>(context, listen: false);
+    final frameUrl = provider.selectedFrameAsset;
 
     debugPrint('⏱ [0] _waitForFrameAndCapture — frameUrl: $frameUrl');
 
@@ -504,7 +560,10 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
 
   Future<void> _captureAndUpload() async {
     if (_isUploaded) return;
-    setState(() { _isUploading = true; _uploadStatus = 'Merender foto...'; });
+    setState(() {
+      _isUploading = true;
+      _uploadStatus = 'Merender foto...';
+    });
 
     try {
       final sw = Stopwatch()..start();
@@ -514,39 +573,47 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
           as RenderRepaintBoundary?;
       if (boundary == null) {
         debugPrint('❌ [1] boundary null');
-        setState(() { _isUploading = false; _uploadStatus = 'Gagal capture widget.'; });
+        setState(() {
+          _isUploading = false;
+          _uploadStatus = 'Gagal capture widget.';
+        });
         return;
       }
-      debugPrint('⏱ [2] boundary OK — size: ${boundary.size} (${sw.elapsedMilliseconds}ms)');
+      debugPrint(
+          '⏱ [2] boundary OK — size: ${boundary.size} (${sw.elapsedMilliseconds}ms)');
 
       // ── boundary.size sekarang ~ukuran layar (misal 500x707px) ──
       // bukan 2480x3508 seperti sebelumnya
-      final prov    = Provider.of<PhotoProvider>(context, listen: false);
-      final frameW  = prov.selectedFrameWidth;
+      final prov = Provider.of<PhotoProvider>(context, listen: false);
+      final frameW = prov.selectedFrameWidth;
       final renderW = boundary.size.width;
       // Ratio: frameW/renderW misal 2480/500 = 4.96 → clamp ke 4.0
       // Output: 500*4 = 2000px wide — tajam untuk print tanpa terlalu berat
-      final ratio   = (frameW / renderW).clamp(1.0, 4.0);
+      final ratio = (frameW / renderW).clamp(1.0, 4.0);
       debugPrint('⏱ [3] frameW=$frameW renderW=$renderW ratio=$ratio');
 
       // Step A — toImage: ukuran output = renderSize * ratio
       final uiImage = await boundary.toImage(pixelRatio: ratio);
-      debugPrint('⏱ [4] toImage done — ${uiImage.width}x${uiImage.height}px (${sw.elapsedMilliseconds}ms)');
+      debugPrint(
+          '⏱ [4] toImage done — ${uiImage.width}x${uiImage.height}px (${sw.elapsedMilliseconds}ms)');
 
       // Step B — rawRgba: CEPAT, tidak ada encoding
-      final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final byteData =
+          await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) throw Exception('toByteData null');
       final rawBytes = byteData.buffer.asUint8List();
-      debugPrint('⏱ [5] toByteData rawRgba done — ${rawBytes.length} bytes (${sw.elapsedMilliseconds}ms)');
+      debugPrint(
+          '⏱ [5] toByteData rawRgba done — ${rawBytes.length} bytes (${sw.elapsedMilliseconds}ms)');
 
       // Step C — encode PNG di background isolate, UI tetap responsive
       if (mounted) setState(() => _uploadStatus = 'Encoding PNG...');
       final pngBytes = await compute(_encodePngInIsolate, {
-        'width':  uiImage.width,
+        'width': uiImage.width,
         'height': uiImage.height,
-        'raw':    rawBytes,
+        'raw': rawBytes,
       });
-      debugPrint('⏱ [6] PNG encode done — ${pngBytes.length} bytes (${sw.elapsedMilliseconds}ms)');
+      debugPrint(
+          '⏱ [6] PNG encode done — ${pngBytes.length} bytes (${sw.elapsedMilliseconds}ms)');
 
       if (!mounted) return;
       final provider = Provider.of<PhotoProvider>(context, listen: false);
@@ -555,41 +622,51 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
       if (mounted) setState(() => _uploadStatus = 'Mengupload ke server...');
 
       // Step D — upload ke server
-      final tempDir  = await getTemporaryDirectory();
+      final tempDir = await getTemporaryDirectory();
       final tempFile = File(
-        '${tempDir.path}/result_${DateTime.now().millisecondsSinceEpoch}.png');
+          '${tempDir.path}/result_${DateTime.now().millisecondsSinceEpoch}.png');
       await tempFile.writeAsBytes(pngBytes);
       debugPrint('⏱ [7] tempFile written (${sw.elapsedMilliseconds}ms)');
 
-      final uri     = Uri.parse('$_backendUrl/api/photobooth/upload/final');
+      final uri = Uri.parse('$_backendUrl/api/photobooth/upload/final');
       final request = http.MultipartRequest('POST', uri)
         ..fields['session_uuid'] = provider.sessionUuid
-        ..files.add(await http.MultipartFile.fromPath(
-            'photo', tempFile.path,
+        ..files.add(await http.MultipartFile.fromPath('photo', tempFile.path,
             contentType: http_parser.MediaType('image', 'png')));
 
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
-      debugPrint('⏱ [8] upload done — status: ${response.statusCode} (${sw.elapsedMilliseconds}ms)');
+      debugPrint(
+          '⏱ [8] upload done — status: ${response.statusCode} (${sw.elapsedMilliseconds}ms)');
 
-      try { await tempFile.delete(); } catch (_) {}
+      try {
+        await tempFile.delete();
+      } catch (_) {}
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         if (mounted) {
-          setState(() { _isUploaded = true; _isUploading = false; _uploadStatus = ''; });
+          setState(() {
+            _isUploaded = true;
+            _isUploading = false;
+            _uploadStatus = '';
+          });
         }
         debugPrint('✅ [9] Total: ${sw.elapsedMilliseconds}ms');
       } else {
         if (mounted) {
           setState(() {
-            _isUploading  = false;
+            _isUploading = false;
             _uploadStatus = 'Upload gagal: ${response.statusCode}';
           });
         }
       }
     } catch (e) {
       debugPrint("❌ Capture/Upload error: $e");
-      if (mounted) setState(() { _isUploading = false; _uploadStatus = 'Error: $e'; });
+      if (mounted)
+        setState(() {
+          _isUploading = false;
+          _uploadStatus = 'Error: $e';
+        });
     }
   }
 
@@ -607,17 +684,20 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               if (_isUploading) ...[
                 const SizedBox(
-                  width: 14, height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white54)),
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white54)),
                 const SizedBox(width: 8),
                 Text(_uploadStatus,
-                  style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    style:
+                        const TextStyle(color: Colors.white54, fontSize: 11)),
               ] else if (_isUploaded) ...[
-                const Icon(Icons.cloud_done_rounded, color: Colors.greenAccent, size: 18),
+                const Icon(Icons.cloud_done_rounded,
+                    color: Colors.greenAccent, size: 18),
                 const SizedBox(width: 6),
                 const Text("Uploaded",
-                  style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
+                    style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
               ],
             ]),
           ),
@@ -639,7 +719,7 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
                 child: FittedBox(
                   fit: BoxFit.contain,
                   child: SizedBox(
-                    width:  frameW,
+                    width: frameW,
                     height: frameH,
                     child: _buildFrameResult(provider),
                   ),
@@ -657,7 +737,8 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
     final double h = provider.selectedFrameHeight;
 
     return Container(
-      width: w, height: h,
+      width: w,
+      height: h,
       color: Colors.white,
       child: Stack(
         fit: StackFit.expand,
@@ -692,20 +773,22 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
     if (photos.isEmpty) return [];
 
     return provider.photoSlots.map((slot) {
-      final int idx    = slot.photoIndex.clamp(0, photos.length - 1);
+      final int idx = slot.photoIndex.clamp(0, photos.length - 1);
       final photoBytes = photos[idx].imageData;
 
       return Positioned(
-        left: slot.x, top: slot.y,
-        width: slot.width, height: slot.height,
+        left: slot.x,
+        top: slot.y,
+        width: slot.width,
+        height: slot.height,
         child: Transform.rotate(
           angle: slot.rotation * (math.pi / 180),
           child: ClipRect(
             child: Image.memory(
               photoBytes,
-              width:     slot.width,
-              height:    slot.height,
-              fit:       BoxFit.cover,
+              width: slot.width,
+              height: slot.height,
+              fit: BoxFit.cover,
               alignment: Alignment.topCenter,
             ),
           ),
@@ -715,27 +798,24 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
   }
 
   Widget _buildGridFallback(PhotoProvider provider) {
-    final layout    = provider.selectedLayout;
+    final layout = provider.selectedLayout;
     final int count = provider.targetPhotoCount;
-    final int cols  = count == 3 ? 1 : 2;
+    final int cols = count == 3 ? 1 : 2;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        layout.leftPadding,  layout.topPadding,
-        layout.rightPadding, layout.bottomPadding),
+      padding: EdgeInsets.fromLTRB(layout.leftPadding, layout.topPadding,
+          layout.rightPadding, layout.bottomPadding),
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount:   cols,
+          crossAxisCount: cols,
           crossAxisSpacing: layout.horizontalSpacing,
-          mainAxisSpacing:  layout.verticalSpacing,
+          mainAxisSpacing: layout.verticalSpacing,
           childAspectRatio: layout.childAspectRatio,
         ),
         itemCount: provider.photos.length,
-        itemBuilder: (_, i) => Image.memory(
-          provider.photos[i].imageData,
-          fit:       BoxFit.cover,
-          alignment: Alignment.topCenter),
+        itemBuilder: (_, i) => Image.memory(provider.photos[i].imageData,
+            fit: BoxFit.cover, alignment: Alignment.topCenter),
       ),
     );
   }
@@ -746,11 +826,12 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
 // ============================================================
 class _GifPreviewPage extends StatefulWidget {
   const _GifPreviewPage();
-  @override State<_GifPreviewPage> createState() => _GifPreviewPageState();
+  @override
+  State<_GifPreviewPage> createState() => _GifPreviewPageState();
 }
 
 class _GifPreviewPageState extends State<_GifPreviewPage> {
-  int    _index = 0;
+  int _index = 0;
   Timer? _timer;
 
   @override
@@ -764,7 +845,11 @@ class _GifPreviewPageState extends State<_GifPreviewPage> {
     });
   }
 
-  @override void dispose() { _timer?.cancel(); super.dispose(); }
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -774,9 +859,11 @@ class _GifPreviewPageState extends State<_GifPreviewPage> {
         builder: (_, provider, __) {
           if (provider.photos.isEmpty) {
             return const Center(
-              child: Text("No Photos",
-                style: TextStyle(
-                  color: Colors.white, fontFamily: 'Ambitsek', fontSize: 24)));
+                child: Text("No Photos",
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'Ambitsek',
+                        fontSize: 24)));
           }
           return Stack(
             fit: StackFit.expand,
@@ -785,48 +872,53 @@ class _GifPreviewPageState extends State<_GifPreviewPage> {
                 duration: const Duration(milliseconds: 300),
                 child: Image.memory(
                   provider.photos[_index].imageData,
-                  key:       ValueKey(_index),
-                  fit:       BoxFit.cover,
-                  width:     double.infinity,
-                  height:    double.infinity,
+                  key: ValueKey(_index),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
                   alignment: Alignment.topCenter,
                 ),
               ),
               IgnorePointer(
                 child: Image.asset(
                   'assets/images/cam_ovl.png',
-                  fit:    BoxFit.cover,
-                  width:  double.infinity,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
                   height: double.infinity,
                 ),
               ),
               Positioned(
-                top: 40, left: 20,
+                top: 40,
+                left: 20,
                 child: GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.black54,
-                      border: Border.all(color: Colors.white30),
-                      borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                        color: Colors.black54,
+                        border: Border.all(color: Colors.white30),
+                        borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.arrow_back,
+                        color: Colors.white, size: 24),
                   ),
                 ),
               ),
               Positioned(
-                bottom: 30, left: 0, right: 0,
+                bottom: 30,
+                left: 0,
+                right: 0,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(provider.photos.length, (i) =>
-                    AnimatedContainer(
+                  children: List.generate(
+                    provider.photos.length,
+                    (i) => AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
-                      width:  _index == i ? 20 : 8,
+                      width: _index == i ? 20 : 8,
                       height: 8,
                       margin: const EdgeInsets.symmetric(horizontal: 4),
                       decoration: BoxDecoration(
-                        color: _index == i ? Colors.white : Colors.white38,
-                        borderRadius: BorderRadius.circular(4)),
+                          color: _index == i ? Colors.white : Colors.white38,
+                          borderRadius: BorderRadius.circular(4)),
                     ),
                   ),
                 ),
@@ -844,45 +936,53 @@ class _GifPreviewPageState extends State<_GifPreviewPage> {
 // ============================================================
 class _VideoPreviewPage extends StatefulWidget {
   const _VideoPreviewPage();
-  @override State<_VideoPreviewPage> createState() => _VideoPreviewPageState();
+  @override
+  State<_VideoPreviewPage> createState() => _VideoPreviewPageState();
 }
 
 class _VideoPreviewPageState extends State<_VideoPreviewPage> {
-  Timer?    _timer;
+  Timer? _timer;
   List<int> _currentDisplayIndices = [];
-  int       _tick = 0;
+  int _tick = 0;
 
   @override
   void initState() {
     super.initState();
     _updateSlideshow();
     _timer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
-      if (mounted) setState(() { _tick++; _updateSlideshow(); });
+      if (mounted)
+        setState(() {
+          _tick++;
+          _updateSlideshow();
+        });
     });
   }
 
   void _updateSlideshow() {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
-    final count    = provider.photos.length;
+    final count = provider.photos.length;
     if (count == 0) return;
     _currentDisplayIndices = List.generate(count, (i) => (i + _tick) % count);
   }
 
-  @override void dispose() { _timer?.cancel(); super.dispose(); }
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text("Video Preview"),
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white),
+          title: const Text("Video Preview"),
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white),
       body: Consumer<PhotoProvider>(
         builder: (_, provider, __) => Center(
-          child: _VideoFrameBuilder(
-            provider:     provider,
-            orderIndices: _currentDisplayIndices)),
+            child: _VideoFrameBuilder(
+                provider: provider, orderIndices: _currentDisplayIndices)),
       ),
     );
   }
@@ -890,13 +990,15 @@ class _VideoPreviewPageState extends State<_VideoPreviewPage> {
 
 class _VideoFrameBuilder extends StatelessWidget {
   final PhotoProvider provider;
-  final List<int>     orderIndices;
-  const _VideoFrameBuilder({required this.provider, required this.orderIndices});
+  final List<int> orderIndices;
+  const _VideoFrameBuilder(
+      {required this.provider, required this.orderIndices});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 344, height: 515,
+      width: 344,
+      height: 515,
       color: Colors.white,
       child: Stack(fit: StackFit.expand, children: [
         _buildContent(),
@@ -909,25 +1011,24 @@ class _VideoFrameBuilder extends StatelessWidget {
   }
 
   Widget _buildContent() {
-    final layout  = provider.selectedLayout;
+    final layout = provider.selectedLayout;
     final int cnt = provider.targetPhotoCount;
-    final int xc  = cnt == 3 ? 1 : 2;
+    final int xc = cnt == 3 ? 1 : 2;
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        layout.leftPadding,  layout.topPadding,
-        layout.rightPadding, layout.bottomPadding),
+      padding: EdgeInsets.fromLTRB(layout.leftPadding, layout.topPadding,
+          layout.rightPadding, layout.bottomPadding),
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount:   xc,
-          crossAxisSpacing: layout.horizontalSpacing,
-          mainAxisSpacing:  layout.verticalSpacing,
-          childAspectRatio: layout.childAspectRatio),
+            crossAxisCount: xc,
+            crossAxisSpacing: layout.horizontalSpacing,
+            mainAxisSpacing: layout.verticalSpacing,
+            childAspectRatio: layout.childAspectRatio),
         itemCount: orderIndices.length,
         itemBuilder: (_, i) => Image.memory(
-          provider.photos[orderIndices[i]].imageData,
-          fit:       BoxFit.cover,
-          alignment: Alignment.topCenter),
+            provider.photos[orderIndices[i]].imageData,
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter),
       ),
     );
   }
