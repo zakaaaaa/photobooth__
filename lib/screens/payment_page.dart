@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:webview_windows/webview_windows.dart';
 import '../providers/photo_provider.dart';
 import '../services/api_service.dart';
 import 'static_frame_template_page.dart';
@@ -23,9 +24,11 @@ class _PaymentPageState extends State<PaymentPage> {
   String _voucherError = "";
   bool _isValidatingVoucher = false;
 
-  // QRIS state
-  String? _qrContent;
+  // WebView state (menggantikan QRIS state)
+  String? _paymentUrl;
   Timer? _pollingTimer;
+  final WebviewController _webviewController = WebviewController();
+  bool _isWebViewReady = false;
 
   final double _sessionPrice = 500;
 
@@ -33,6 +36,7 @@ class _PaymentPageState extends State<PaymentPage> {
   void dispose() {
     _pollingTimer?.cancel();
     _voucherController.dispose();
+    _webviewController.dispose();
     super.dispose();
   }
 
@@ -41,8 +45,6 @@ class _PaymentPageState extends State<PaymentPage> {
   // ================================================================
   void _triggerBypass() async {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
-    // ✅ Hanya reset — startSession() dipanggil di static_frame_template_page
-    // setelah session_duration_minutes dari API berhasil di-fetch
     provider.reset();
 
     final apiService = Provider.of<ApiService>(context, listen: false);
@@ -82,10 +84,13 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   // ================================================================
-  // QRIS FLOW
+  // QRIS FLOW (sekarang membuka WebView)
   // ================================================================
   void _onSelectQRIS() {
-    setState(() { _isSelectionMode = false; _isLoading = true; });
+    setState(() {
+      _isSelectionMode = false;
+      _isLoading = true;
+    });
     _initQrisPayment();
   }
 
@@ -110,15 +115,32 @@ class _PaymentPageState extends State<PaymentPage> {
       return;
     }
 
-    final qrContent = await apiService.generatePaymentLink(
-      newUuid, _sessionPrice, provider.machineId,
-    );
+    // Dapatkan payment_url dari backend
+    final paymentUrl = await apiService.generatePaymentLink(newUuid);
 
-    if (mounted && qrContent != null) {
-      setState(() { _qrContent = qrContent; _isLoading = false; });
+    if (mounted && paymentUrl != null) {
+      // Inisialisasi WebView dan load URL
+      await _initWebView(paymentUrl);
+      setState(() {
+        _paymentUrl = paymentUrl;
+        _isLoading = false;
+      });
       _startPolling(newUuid);
     } else {
-      _resetToMenu("Gagal mendapatkan QR payment.");
+      _resetToMenu("Gagal mendapatkan halaman pembayaran.");
+    }
+  }
+
+  Future<void> _initWebView(String url) async {
+    try {
+      await _webviewController.initialize();
+      await _webviewController.setBackgroundColor(Colors.white);
+      await _webviewController.loadUrl(url);
+      if (mounted) {
+        setState(() => _isWebViewReady = true);
+      }
+    } catch (e) {
+      print("❌ Error WebView: $e");
     }
   }
 
@@ -126,7 +148,10 @@ class _PaymentPageState extends State<PaymentPage> {
   // VOUCHER FLOW
   // ================================================================
   void _onSelectVoucher() {
-    setState(() { _isSelectionMode = false; _isVoucherMode = true; });
+    setState(() {
+      _isSelectionMode = false;
+      _isVoucherMode = true;
+    });
   }
 
   void _validateAndUseVoucher() async {
@@ -139,7 +164,10 @@ class _PaymentPageState extends State<PaymentPage> {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     final apiService = Provider.of<ApiService>(context, listen: false);
 
-    setState(() { _isValidatingVoucher = true; _voucherError = ""; });
+    setState(() {
+      _isValidatingVoucher = true;
+      _voucherError = "";
+    });
 
     if (provider.machineId.isEmpty) await provider.initMachineId();
 
@@ -171,10 +199,16 @@ class _PaymentPageState extends State<PaymentPage> {
   // ================================================================
   void _startPolling(String uuid) {
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-      if (!mounted) { timer.cancel(); return; }
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       final apiService = Provider.of<ApiService>(context, listen: false);
       final paid = await apiService.checkPaymentStatus(uuid);
-      if (paid) { timer.cancel(); if (mounted) _handlePaymentSuccess(); }
+      if (paid) {
+        timer.cancel();
+        if (mounted) _handlePaymentSuccess();
+      }
     });
   }
 
@@ -183,8 +217,6 @@ class _PaymentPageState extends State<PaymentPage> {
     if (_isPaid) return;
     if (mounted) {
       setState(() => _isPaid = true);
-      // ✅ Hanya reset — startSession() dipanggil di static_frame_template_page
-      // setelah session_duration_minutes dari API berhasil di-fetch
       Provider.of<PhotoProvider>(context, listen: false).reset();
       Future.delayed(const Duration(seconds: 1), () {
         if (mounted) {
@@ -199,8 +231,15 @@ class _PaymentPageState extends State<PaymentPage> {
 
   void _resetToMenu(String message) {
     if (mounted) {
-      setState(() { _isLoading = false; _isSelectionMode = true; _isVoucherMode = false; _qrContent = null; });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      setState(() {
+        _isLoading = false;
+        _isSelectionMode = true;
+        _isVoucherMode = false;
+        _paymentUrl = null;
+        _isWebViewReady = false;
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -212,26 +251,24 @@ class _PaymentPageState extends State<PaymentPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background
           Positioned.fill(
             child: Image.asset("assets/images/bg.png", fit: BoxFit.cover),
           ),
-
-          // Konten
           Center(
             child: _isSelectionMode
                 ? _buildSelectionMenu()
                 : _isVoucherMode
                     ? _buildVoucherInput()
-                    : _buildQrisView(),
+                    : _buildPaymentWebView(),
           ),
-
-          // ✅ Bypass button — long press pojok kiri bawah
+          // Bypass button
           Positioned(
-            bottom: 0, left: 0,
+            bottom: 0,
+            left: 0,
             child: GestureDetector(
               onLongPress: _triggerBypass,
-              child: Container(width: 80, height: 80, color: Colors.transparent),
+              child:
+                  Container(width: 80, height: 80, color: Colors.transparent),
             ),
           ),
         ],
@@ -246,67 +283,103 @@ class _PaymentPageState extends State<PaymentPage> {
       children: [
         const OutlinedText(
           text: "CHOOSE\nPAYMENT METHOD",
-          fontFamily: 'Ambitsek', fontSize: 70,
-          textColor: Color(0xFFFFED00), outlineColor: Color(0xFFEF7D30),
-          fontWeight: FontWeight.w900, letterSpacing: 1.0, hasShadow: true,
+          fontFamily: 'Ambitsek',
+          fontSize: 70,
+          textColor: Color(0xFFFFED00),
+          outlineColor: Color(0xFFEF7D30),
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.0,
+          hasShadow: true,
         ),
         const SizedBox(height: 50),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            PixelCard(title: "QRIS", imagePath: "assets/images/qris.png", onTap: _onSelectQRIS),
+            PixelCard(
+                title: "QRIS",
+                imagePath: "assets/images/qris.png",
+                onTap: _onSelectQRIS),
             const SizedBox(width: 30),
-            PixelCard(title: "VOUCHER", imagePath: "assets/images/voucher.png", onTap: _onSelectVoucher),
+            PixelCard(
+                title: "VOUCHER",
+                imagePath: "assets/images/voucher.png",
+                onTap: _onSelectVoucher),
           ],
         ),
       ],
     );
   }
 
-  // ── QRIS VIEW ──
-  Widget _buildQrisView() {
+  // ── PAYMENT WEBVIEW (menggantikan QR View) ──
+  Widget _buildPaymentWebView() {
     return Container(
-      width: 420, padding: const EdgeInsets.all(24),
+      width: 500,
+      height: 650,
       decoration: BoxDecoration(
         color: const Color(0xFFC0C0C0),
         border: Border.all(width: 3, color: Colors.black),
-        boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(10, 10))],
+        boxShadow: const [
+          BoxShadow(color: Colors.black45, offset: Offset(10, 10))
+        ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
+          // Title bar
           Container(
-            width: double.infinity, height: 32, color: const Color(0xFF0000AA),
-            child: const Center(child: Text("PAYMENT GATEWAY", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1))),
-          ),
-          const SizedBox(height: 16),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(40),
-              child: Column(children: [CircularProgressIndicator(), SizedBox(height: 12), Text("Memuat QR Code...")]),
-            )
-          else if (_isPaid)
-            _buildSuccessView()
-          else if (_qrContent != null)
-            Column(
-              children: [
-                const Text("Scan QR berikut untuk membayar:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.white,
-                  child: Text(_qrContent!, style: const TextStyle(fontSize: 11, fontFamily: 'monospace'), textAlign: TextAlign.center),
-                ),
-                const SizedBox(height: 8),
-                const Text("Menunggu konfirmasi pembayaran...", style: TextStyle(fontSize: 12, color: Colors.black54)),
-              ],
+            width: double.infinity,
+            height: 32,
+            color: const Color(0xFF0000AA),
+            child: const Center(
+              child: Text("PAYMENT GATEWAY",
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1)),
             ),
-          const SizedBox(height: 16),
+          ),
+
+          // Content
+          Expanded(
+            child: _isLoading
+                ? const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 12),
+                        Text("Memuat halaman pembayaran..."),
+                      ],
+                    ),
+                  )
+                : _isPaid
+                    ? _buildSuccessView()
+                    : _isWebViewReady
+                        ? Webview(_webviewController)
+                        : const Center(
+                            child: Text("Memuat WebView..."),
+                          ),
+          ),
+
+          // Cancel button
           if (!_isPaid)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, shape: const BeveledRectangleBorder()),
-              onPressed: () { _pollingTimer?.cancel(); _resetToMenu("Transaksi dibatalkan."); },
-              child: const Text("CANCEL"),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    shape: const BeveledRectangleBorder(),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () {
+                    _pollingTimer?.cancel();
+                    _resetToMenu("Transaksi dibatalkan.");
+                  },
+                  child: const Text("CANCEL"),
+                ),
+              ),
             ),
         ],
       ),
@@ -316,45 +389,55 @@ class _PaymentPageState extends State<PaymentPage> {
   // ── VOUCHER INPUT ──
   Widget _buildVoucherInput() {
     return Container(
-      width: 420, padding: const EdgeInsets.all(24),
+      width: 420,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: const Color(0xFFC0C0C0),
         border: Border.all(width: 3, color: Colors.black),
-        boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(10, 10))],
+        boxShadow: const [
+          BoxShadow(color: Colors.black45, offset: Offset(10, 10))
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: double.infinity, height: 32, color: const Color(0xFF0000AA),
-            child: const Center(child: Text("MASUKKAN VOUCHER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1))),
+            width: double.infinity,
+            height: 32,
+            color: const Color(0xFF0000AA),
+            child: const Center(
+                child: Text("MASUKKAN VOUCHER",
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1))),
           ),
           const SizedBox(height: 20),
-
           if (_isPaid)
             _buildSuccessView()
           else ...[
-            const Text("Masukkan kode voucher kamu:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const Text("Masukkan kode voucher kamu:",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 12),
-
             TextField(
               controller: _voucherController,
               textCapitalization: TextCapitalization.characters,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 4),
+              style: const TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 4),
               decoration: InputDecoration(
                 hintText: "XXXXX",
                 hintStyle: const TextStyle(color: Colors.black38),
                 filled: true,
                 fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                 errorText: _voucherError.isNotEmpty ? _voucherError : null,
               ),
             ),
-
             const SizedBox(height: 16),
-
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -366,16 +449,26 @@ class _PaymentPageState extends State<PaymentPage> {
                 ),
                 onPressed: _isValidatingVoucher ? null : _validateAndUseVoucher,
                 child: _isValidatingVoucher
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text("GUNAKAN VOUCHER", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                    : const Text("GUNAKAN VOUCHER",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, letterSpacing: 1)),
               ),
             ),
-
             const SizedBox(height: 10),
-
             TextButton(
-              onPressed: () => setState(() { _isVoucherMode = false; _isSelectionMode = true; _voucherError = ""; _voucherController.clear(); }),
-              child: const Text("← Kembali", style: TextStyle(color: Colors.black54)),
+              onPressed: () => setState(() {
+                _isVoucherMode = false;
+                _isSelectionMode = true;
+                _voucherError = "";
+                _voucherController.clear();
+              }),
+              child: const Text("← Kembali",
+                  style: TextStyle(color: Colors.black54)),
             ),
           ],
         ],
@@ -390,9 +483,14 @@ class _PaymentPageState extends State<PaymentPage> {
         SizedBox(height: 20),
         Icon(Icons.check_circle, color: Colors.green, size: 72),
         SizedBox(height: 12),
-        Text("BERHASIL!", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Ambitsek')),
+        Text("BERHASIL!",
+            style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Ambitsek')),
         SizedBox(height: 6),
-        Text("Menuju pemilihan frame...", style: TextStyle(fontSize: 13, color: Colors.black54)),
+        Text("Menuju pemilihan frame...",
+            style: TextStyle(fontSize: 13, color: Colors.black54)),
         SizedBox(height: 20),
       ],
     );
@@ -400,13 +498,17 @@ class _PaymentPageState extends State<PaymentPage> {
 }
 
 // =========================================================
-// WIDGETS
+// WIDGETS (tidak berubah)
 // =========================================================
 class PixelCard extends StatefulWidget {
   final String title;
   final String imagePath;
   final VoidCallback onTap;
-  const PixelCard({super.key, required this.title, required this.imagePath, required this.onTap});
+  const PixelCard(
+      {super.key,
+      required this.title,
+      required this.imagePath,
+      required this.onTap});
   @override
   State<PixelCard> createState() => _PixelCardState();
 }
@@ -417,23 +519,38 @@ class _PixelCardState extends State<PixelCard> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) { setState(() => _isPressed = false); widget.onTap(); },
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
       onTapCancel: () => setState(() => _isPressed = false),
       child: Transform.scale(
         scale: _isPressed ? 0.95 : 1.0,
         child: Container(
-          width: 300, height: 320,
+          width: 300,
+          height: 320,
           decoration: BoxDecoration(
             color: const Color(0xFFC0C0C0),
             border: Border.all(width: 3, color: Colors.black),
-            boxShadow: _isPressed ? [] : const [BoxShadow(color: Colors.black54, offset: Offset(6, 6))],
+            boxShadow: _isPressed
+                ? []
+                : const [
+                    BoxShadow(color: Colors.black54, offset: Offset(6, 6))
+                  ],
           ),
           child: Column(
             children: [
               Container(
-                width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 8),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 color: const Color(0xFF0000AA),
-                child: Text(widget.title, textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Ambitsek', color: Colors.white, fontSize: 15, letterSpacing: 2)),
+                child: Text(widget.title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontFamily: 'Ambitsek',
+                        color: Colors.white,
+                        fontSize: 15,
+                        letterSpacing: 2)),
               ),
               Expanded(
                 child: Center(
@@ -462,18 +579,55 @@ class OutlinedText extends StatelessWidget {
   final bool hasShadow;
 
   const OutlinedText({
-    super.key, required this.text, required this.fontFamily,
-    required this.fontSize, required this.textColor, required this.outlineColor,
-    this.fontWeight = FontWeight.normal, this.letterSpacing = 0.0, this.hasShadow = false,
+    super.key,
+    required this.text,
+    required this.fontFamily,
+    required this.fontSize,
+    required this.textColor,
+    required this.outlineColor,
+    this.fontWeight = FontWeight.normal,
+    this.letterSpacing = 0.0,
+    this.hasShadow = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        if (hasShadow) Positioned(top: 4, left: 4, child: Text(text, textAlign: TextAlign.center, style: TextStyle(fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2, color: Colors.black.withOpacity(0.6)))),
-        Text(text, textAlign: TextAlign.center, style: TextStyle(fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2, foreground: Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = outlineColor)),
-        Text(text, textAlign: TextAlign.center, style: TextStyle(fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2, color: textColor)),
+        if (hasShadow)
+          Positioned(
+              top: 4,
+              left: 4,
+              child: Text(text,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontFamily: fontFamily,
+                      fontSize: fontSize,
+                      fontWeight: fontWeight,
+                      letterSpacing: letterSpacing,
+                      height: 1.2,
+                      color: Colors.black.withOpacity(0.6)))),
+        Text(text,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontFamily: fontFamily,
+                fontSize: fontSize,
+                fontWeight: fontWeight,
+                letterSpacing: letterSpacing,
+                height: 1.2,
+                foreground: Paint()
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 8
+                  ..color = outlineColor)),
+        Text(text,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontFamily: fontFamily,
+                fontSize: fontSize,
+                fontWeight: fontWeight,
+                letterSpacing: letterSpacing,
+                height: 1.2,
+                color: textColor)),
       ],
     );
   }

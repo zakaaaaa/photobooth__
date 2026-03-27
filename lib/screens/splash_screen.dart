@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../services/license_service.dart';
 import 'payment_page.dart';
@@ -21,6 +22,7 @@ class _SplashScreenState extends State<SplashScreen> {
   String _hwid = "";
   bool _showDebugPanel = false;
   bool _hwidCopied = false;
+  bool _isHoveringClose = false;
 
   static const String _backendUrl = 'http://168.231.125.203:8181';
 
@@ -279,6 +281,41 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
               ),
             ),
+
+          // 5. HOVER CLOSE BUTTON (TOP CENTER)
+          Positioned(
+            top: 0,
+            left: MediaQuery.of(context).size.width / 2 - 100,
+            width: 200,
+            height: 60,
+            child: MouseRegion(
+              onEnter: (_) => setState(() => _isHoveringClose = true),
+              onExit: (_) => setState(() => _isHoveringClose = false),
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: _isHoveringClose ? 1.0 : 0.0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                      onPressed: () {
+                        if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+                          exit(0);
+                        } else {
+                          SystemNavigator.pop();
+                        }
+                      },
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.red.withOpacity(0.8),
+                        hoverColor: Colors.red,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

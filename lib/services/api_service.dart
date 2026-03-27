@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // ✅ Ganti ke VPS baru
-  final String baseUrl = "http://168.231.125.203:8181/api";
+  final String baseUrl = "https://api.amandya.tech/api";
 
   // =================================================================
   // 1. LICENSE CHECK
@@ -14,7 +14,10 @@ class ApiService {
       final uri = Uri.parse("$baseUrl/photobooth/license/check");
       final response = await http.post(
         uri,
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: jsonEncode({'hwid': hwid}),
       );
       return response.statusCode == 200;
@@ -27,7 +30,8 @@ class ApiService {
   // =================================================================
   // 2. SESSION
   // =================================================================
-  Future<bool> startSession(String uuid, {
+  Future<bool> startSession(
+    String uuid, {
     required String hwid,
     String paymentMethod = 'qris',
     String amount = '0',
@@ -51,7 +55,10 @@ class ApiService {
 
       final response = await http.post(
         uri,
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: jsonEncode(body),
       );
 
@@ -66,21 +73,22 @@ class ApiService {
   // =================================================================
   // 3. PAYMENT
   // =================================================================
-  Future<String?> generatePaymentLink(String sessionUuid, double amount, String hwid) async {
+  Future<String?> generatePaymentLink(String sessionUuid) async {
     try {
       final uri = Uri.parse("$baseUrl/payment/generate");
       final response = await http.post(
         uri,
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: jsonEncode({
-          'device_id': hwid,
           'session_uuid': sessionUuid,
-          'amount': amount.toInt(),
         }),
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['qr_content'];
+        return data['payment_url'];
       }
     } catch (e) {
       print("❌ Error Payment: $e");
@@ -93,7 +101,10 @@ class ApiService {
       final uri = Uri.parse("$baseUrl/payment/check-status");
       final response = await http.post(
         uri,
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: jsonEncode({'session_uuid': sessionUuid}),
       );
       if (response.statusCode == 200) {
@@ -109,12 +120,16 @@ class ApiService {
   // =================================================================
   // 4. VOUCHER VALIDATION
   // =================================================================
-  Future<Map<String, dynamic>?> validateVoucher(String code, String hwid) async {
+  Future<Map<String, dynamic>?> validateVoucher(
+      String code, String hwid) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/session/validate-voucher");
       final response = await http.post(
         uri,
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: jsonEncode({'code': code, 'hwid': hwid}),
       );
       if (response.statusCode == 200) {
