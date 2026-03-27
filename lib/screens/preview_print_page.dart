@@ -267,11 +267,11 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                             },
                           ),
                           const SizedBox(width: 20),
-                          RetroButton(
-                              icon: Icons.download,
-                              label: "SAVE",
-                              color: Colors.blue,
-                              onTap: () => _downloadPhotoToLocal(context)),
+                          // RetroButton(
+                          //     icon: Icons.download,
+                          //     label: "SAVE",
+                          //     color: Colors.blue,
+                          //     onTap: () => _downloadPhotoToLocal(context)),
                           const SizedBox(width: 20),
                           RetroButton(
                               icon: Icons.print,
