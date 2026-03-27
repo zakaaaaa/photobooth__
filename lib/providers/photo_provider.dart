@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart'; 
-import '../services/license_service.dart'; // <--- WAJIB IMPORT INI
+import '../services/license_service.dart';
 
 // ==========================================
 // 1. ENUMS
@@ -20,7 +20,6 @@ enum CustomLayout { vertical, grid }
 class PhotoData {
   final Uint8List imageData;
   final PhotoFilter filter;
-
   PhotoData({required this.imageData, required this.filter});
 }
 
@@ -29,7 +28,6 @@ class StickerData {
   Offset position;
   double size;
   double rotation;
-  
   StickerData({
     required this.assetPath,
     this.position = const Offset(50, 50),
@@ -58,6 +56,38 @@ class FrameLayout {
   });
 }
 
+class PhotoSlot {
+  final int id;
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final double rotation;
+  final int photoIndex;
+
+  const PhotoSlot({
+    required this.id,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    this.rotation = 0,
+    this.photoIndex = 0,
+  });
+
+  factory PhotoSlot.fromJson(Map<String, dynamic> json) {
+    return PhotoSlot(
+      id:         (json['id']          as num).toInt(),
+      x:          (json['x']           as num).toDouble(),
+      y:          (json['y']           as num).toDouble(),
+      width:      (json['width']       as num).toDouble(),
+      height:     (json['height']      as num).toDouble(),
+      rotation:   (json['rotation']    as num? ?? 0).toDouble(),
+      photoIndex: (json['photo_index'] as num? ?? 0).toInt(),
+    );
+  }
+}
+
 // ==========================================
 // 3. MAIN PROVIDER CLASS
 // ==========================================
@@ -65,11 +95,34 @@ class PhotoProvider extends ChangeNotifier {
 
   // --- A. SESSION & TIMER MANAGEMENT ---
   Timer? _sessionTimer;
-  int _remainingTime = 320; 
+  int _remainingTime   = 0;
   bool _isSessionActive = false;
 
-  int get remainingTime => _remainingTime;
-  bool get isSessionActive => _isSessionActive;
+  // ── BARU: durasi dari API, di-set saat fetch /api/frames ──
+  int _sessionDurationMin = 30; // fallback default
+
+  // ── BARU: callback dipanggil saat timer habis ──
+  // Di-assign oleh root widget (mis. SplashScreen atau MaterialApp wrapper)
+  VoidCallback? onSessionExpired;
+
+  int  get remainingTime      => _remainingTime;
+  int  get remainingSeconds   => _remainingTime; // alias untuk SessionTimerOverlay
+  bool get isSessionActive    => _isSessionActive;
+  int  get sessionDurationMin => _sessionDurationMin;
+
+  // ── BARU: progress 1.0 (penuh) → 0.0 (habis), untuk progress bar ──
+  double get timerProgress {
+    final total = _sessionDurationMin * 60;
+    if (total <= 0) return 0;
+    return (_remainingTime / total).clamp(0.0, 1.0);
+  }
+
+  // ── BARU: warna otomatis hijau → kuning → merah ──
+  Color get timerColor {
+    if (timerProgress > 0.5) return const Color(0xFF34d399); // hijau
+    if (timerProgress > 0.2) return const Color(0xFFfbbf24); // kuning
+    return const Color(0xFFf87171);                           // merah
+  }
 
   String get timerString {
     final minutes = (_remainingTime / 60).floor().toString().padLeft(2, '0');
@@ -77,24 +130,26 @@ class PhotoProvider extends ChangeNotifier {
     return "$minutes:$seconds";
   }
 
-  // --- HWID & UUID MANAGEMENT (UPDATED) ---
+  // ── BARU: dipanggil saat response /api/frames diterima ──
+  void setSessionDuration(int minutes) {
+    _sessionDurationMin = minutes > 0 ? minutes : 30;
+    debugPrint('⏱ Session duration set dari API: $_sessionDurationMin menit');
+  }
+
   String _sessionUuid = ''; 
   String get sessionUuid => _sessionUuid;
 
-  // Variable untuk menyimpan HWID mesin
   String _machineId = '';
   String get machineId => _machineId;
 
-  // Fungsi untuk Load HWID (Dipanggil di awal / Splash Screen / Payment)
   Future<void> initMachineId() async {
     if (_machineId.isEmpty) {
       try {
-        // Panggil fungsi getHardwareId dari LicenseService (Pastikan Public)
         _machineId = await LicenseService().getHardwareId();
         notifyListeners();
-        print("💻 Machine ID Loaded: $_machineId");
+        debugPrint("Machine ID Loaded: $_machineId");
       } catch (e) {
-        print("❌ Gagal Load Machine ID: $e");
+        debugPrint("Gagal Load Machine ID: $e");
       }
     }
   }
@@ -104,8 +159,6 @@ class PhotoProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- PHOTO MANAGEMENT ---
-
   void removePhotoAt(int index) {
     if (index >= 0 && index < _photos.length) {
       _photos.removeAt(index);
@@ -113,19 +166,26 @@ class PhotoProvider extends ChangeNotifier {
     }
   }
 
+  // ── startSession: sekarang pakai _sessionDurationMin dari API ──
   void startSession() {
-    reset(); 
-    _remainingTime = 320; 
+    _sessionTimer?.cancel();
+    _remainingTime   = _sessionDurationMin * 60; // ← dari API, bukan hardcode 320
     _isSessionActive = true;
     notifyListeners();
 
-    _sessionTimer?.cancel();
+    debugPrint('⏱ Timer dimulai: $_sessionDurationMin menit ($_remainingTime detik)');
+
     _sessionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingTime > 0) {
         _remainingTime--;
         notifyListeners();
       } else {
-        stopSession(); 
+        debugPrint('⏱ Timer habis! Memanggil onSessionExpired...');
+        timer.cancel();
+        _isSessionActive = false;
+        notifyListeners();
+        // ── panggil callback → screen navigasi ke SplashScreen ──
+        onSessionExpired?.call();
       }
     });
   }
@@ -133,13 +193,13 @@ class PhotoProvider extends ChangeNotifier {
   void stopSession() {
     _sessionTimer?.cancel();
     _isSessionActive = false;
+    _remainingTime   = 0;
     notifyListeners();
   }
 
   Uint8List? _finalImageBytes;
   Uint8List? get finalImageBytes => _finalImageBytes;
 
-  // Property finalFramePath (Untuk kompatibilitas dengan UI lama)
   String? _finalFramePath;
   String? get finalFramePath => _finalFramePath;
 
@@ -159,18 +219,21 @@ class PhotoProvider extends ChangeNotifier {
   int _targetPhotoCount = 3; 
   String? _selectedFrameAsset;
   FrameLayout _selectedLayout = const FrameLayout();
-
   double? _selectedFrameWidth;
   double? _selectedFrameHeight;
+
+  List<PhotoSlot> _photoSlots = [];
 
   FrameMode get selectedMode => _selectedMode;
   CustomLayout get customLayout => _customLayout;
   int get targetPhotoCount => _targetPhotoCount;
   String? get selectedFrameAsset => _selectedFrameAsset;
   FrameLayout get selectedLayout => _selectedLayout;
-  
-  double get selectedFrameWidth => _selectedFrameWidth ?? 344.0;
+  double get selectedFrameWidth  => _selectedFrameWidth  ?? 344.0;
   double get selectedFrameHeight => _selectedFrameHeight ?? 515.0;
+
+  List<PhotoSlot> get photoSlots => _photoSlots;
+  bool get hasCustomSlots => _photoSlots.isNotEmpty;
 
   void setFrameMode(
     FrameMode mode, {
@@ -180,17 +243,35 @@ class PhotoProvider extends ChangeNotifier {
     double? customWidth,
     double? customHeight,
   }) {
-    _selectedMode = mode;
-    _selectedFrameAsset = frameAsset;
-    _selectedLayout = layout ?? const FrameLayout();
-    _selectedFrameWidth = customWidth;
+    _selectedMode        = mode;
+    _selectedFrameAsset  = frameAsset;
+    _selectedLayout      = layout ?? const FrameLayout();
+    _selectedFrameWidth  = customWidth;
     _selectedFrameHeight = customHeight;
-
+    _photoSlots          = [];
     if (mode == FrameMode.custom) {
       _targetPhotoCount = 4; 
     } else {
       _targetPhotoCount = photoCount;
     }
+    notifyListeners();
+  }
+
+  void setFrameModeWithSlots(
+    FrameMode mode, {
+    required int photoCount,
+    required String frameAsset,
+    required List<PhotoSlot> photoSlots,
+    double? customWidth,
+    double? customHeight,
+  }) {
+    _selectedMode        = mode;
+    _selectedFrameAsset  = frameAsset;
+    _selectedLayout      = const FrameLayout();
+    _selectedFrameWidth  = customWidth;
+    _selectedFrameHeight = customHeight;
+    _photoSlots          = photoSlots;
+    _targetPhotoCount    = photoCount;
     notifyListeners();
   }
 
@@ -210,19 +291,12 @@ class PhotoProvider extends ChangeNotifier {
 
   void addPhoto(Uint8List imageData) {
     if (_photos.length < _targetPhotoCount) {
-      _photos.add(PhotoData(
-        imageData: imageData,
-        filter: _selectedFilter,
-      ));
+      _photos.add(PhotoData(imageData: imageData, filter: _selectedFilter));
       notifyListeners();
     }
   }
 
-  // Overload addPhoto untuk string path (Kompatibilitas)
-  void addPhotoPath(String path) {
-    // Implementasi jika diperlukan, saat ini kita fokus byte data
-    // _photos.add(...)
-  }
+  void addPhotoPath(String path) {}
 
   void setSelectedFilter(PhotoFilter filter) {
     _selectedFilter = filter;
@@ -239,12 +313,9 @@ class PhotoProvider extends ChangeNotifier {
   Color _frameColor = Colors.blue;
   String? _frameTexture;
   FrameShape _frameShape = FrameShape.rectangle;
-  
   Color _frameContainerColor = Colors.white;
   String? _frameContainerTexture;
-
   final List<StickerData> _stickers = [];
-  
   String _headlineText = '';
   double _textSize = 28;
   double _textRotation = 0;
@@ -253,171 +324,79 @@ class PhotoProvider extends ChangeNotifier {
   Color get frameColor => _frameColor;
   String? get frameTexture => _frameTexture;
   FrameShape get frameShape => _frameShape;
-  
   Color get frameContainerColor => _frameContainerColor;
   String? get frameContainerTexture => _frameContainerTexture;
-
   List<StickerData> get stickers => _stickers;
   String get headlineText => _headlineText;
   double get textSize => _textSize;
   double get textRotation => _textRotation;
   Offset get textPosition => _textPosition;
 
-  void setFrameColor(Color color) {
-    _frameColor = color;
-    _frameTexture = null; 
-    notifyListeners();
-  }
+  void setFrameColor(Color color)                 { _frameColor = color; _frameTexture = null; notifyListeners(); }
+  void setFrameTexture(String texturePath)        { _frameTexture = texturePath; notifyListeners(); }
+  void setFrameContainerColor(Color color)        { _frameContainerColor = color; _frameContainerTexture = null; notifyListeners(); }
+  void setFrameContainerTexture(String p)         { _frameContainerTexture = p; notifyListeners(); }
+  void setFrameShape(FrameShape shape)            { _frameShape = shape; notifyListeners(); }
+  void addSticker(String assetPath)               { _stickers.add(StickerData(assetPath: assetPath)); notifyListeners(); }
+  void updateStickerPosition(int i, Offset p)     { if (i < _stickers.length) { _stickers[i].position = p; notifyListeners(); } }
+  void updateStickerSize(int i, double s)         { if (i < _stickers.length) { _stickers[i].size = s; notifyListeners(); } }
+  void updateStickerRotation(int i, double r)     { if (i < _stickers.length) { _stickers[i].rotation = r; notifyListeners(); } }
+  void removeSticker(int i)                       { if (i < _stickers.length) { _stickers.removeAt(i); notifyListeners(); } }
+  void setHeadlineText(String text)               { _headlineText = text; notifyListeners(); }
+  void updateTextSize(double size)                { _textSize = size; notifyListeners(); }
+  void updateTextRotation(double rotation)        { _textRotation = rotation; notifyListeners(); }
+  void updateTextPosition(Offset position)        { _textPosition = position; notifyListeners(); }
 
-  void setFrameTexture(String texturePath) {
-    _frameTexture = texturePath;
-    notifyListeners();
-  }
-
-  void setFrameContainerColor(Color color) {
-    _frameContainerColor = color;
-    _frameContainerTexture = null;
-    notifyListeners();
-  }
-
-  void setFrameContainerTexture(String texturePath) {
-    _frameContainerTexture = texturePath;
-    notifyListeners();
-  }
-
-  void setFrameShape(FrameShape shape) {
-    _frameShape = shape;
-    notifyListeners();
-  }
-
-  void addSticker(String assetPath) {
-    _stickers.add(StickerData(assetPath: assetPath));
-    notifyListeners();
-  }
-
-  void updateStickerPosition(int index, Offset position) {
-    if (index < _stickers.length) {
-      _stickers[index].position = position;
-      notifyListeners();
-    }
-  }
-
-  void updateStickerSize(int index, double size) {
-    if (index < _stickers.length) {
-      _stickers[index].size = size;
-      notifyListeners();
-    }
-  }
-
-  void updateStickerRotation(int index, double rotation) {
-    if (index < _stickers.length) {
-      _stickers[index].rotation = rotation;
-      notifyListeners();
-    }
-  }
-
-  void removeSticker(int index) {
-    if (index < _stickers.length) {
-      _stickers.removeAt(index);
-      notifyListeners();
-    }
-  }
-
-  void setHeadlineText(String text) {
-    _headlineText = text;
-    notifyListeners();
-  }
-
-  void updateTextSize(double size) {
-    _textSize = size;
-    notifyListeners();
-  }
-
-  void updateTextRotation(double rotation) {
-    _textRotation = rotation;
-    notifyListeners();
-  }
-
-  void updateTextPosition(Offset position) {
-    _textPosition = position;
-    notifyListeners();
-  }
-
-  // ==========================================
-  // E. SAVE PHOTOS LOCALLY
-  // ==========================================
+  // --- E. SAVE PHOTOS LOCALLY ---
   Future<String> savePhotosLocally(String userEmail, Uint8List? finalStripBytes) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final dateStr = DateTime.now().toString().split(' ')[0];
       final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
-      
       final sessionFolder = Directory('${directory.path}/Photobooth_Backup/$dateStr/$sessionId');
-      
-      if (!await sessionFolder.exists()) {
-        await sessionFolder.create(recursive: true);
-      }
-
-      // 2. SIMPAN FOTO MENTAH
+      if (!await sessionFolder.exists()) await sessionFolder.create(recursive: true);
       for (int i = 0; i < _photos.length; i++) {
         final file = File('${sessionFolder.path}/raw_photo_$i.jpg');
         await file.writeAsBytes(_photos[i].imageData);
       }
-
-      // 3. SIMPAN FOTO STRIP / FINAL
       if (finalStripBytes != null) {
         final stripFile = File('${sessionFolder.path}/final_strip_result.png');
         await stripFile.writeAsBytes(finalStripBytes);
-        print("✅ Final Strip Tersimpan!");
-      } else {
-        print("⚠️ Peringatan: Final Strip belum ada/belum dirender");
       }
-
-      // 4. Catat Log CSV
       final logFile = File('${directory.path}/Photobooth_Backup/$dateStr/data_pengunjung.csv');
       final csvLine = '$sessionId,$userEmail,${sessionFolder.path},PENDING\n';
       await logFile.writeAsString(csvLine, mode: FileMode.append);
-
       return sessionFolder.path;
-
     } catch (e) {
-      print("❌ Gagal Simpan Lokal: $e");
+      debugPrint("Gagal Simpan Lokal: $e");
       return "";
     }
   }
 
-  // ==========================================
-  // F. RESET & DISPOSE
-  // ==========================================
-  
+  // --- F. RESET & DISPOSE ---
   void reset() {
-    print("🧹 RESET SESSION: Membersihkan memori foto...");
-
     _photos.clear();
-    _finalImageBytes = null; 
-    _finalFramePath = null;
-    
-    // Jangan reset _machineId di sini karena HWID tetap sama
-    // Jangan reset _sessionUuid di sini jika flow payment -> foto (UUID dibuat di payment)
-    // Kecuali start session baru dari awal.
-    
-    _selectedFilter = PhotoFilter.none;
-    _isSessionActive = false;
+    _finalImageBytes       = null; 
+    _finalFramePath        = null;
+    _selectedFilter        = PhotoFilter.none;
+    _isSessionActive       = false;
+    _remainingTime         = 0;
     _sessionTimer?.cancel();
-    
-    _frameColor = Colors.blue;
-    _frameTexture = null;
-    _frameContainerColor = Colors.white; 
+    _frameColor            = Colors.blue;
+    _frameTexture          = null;
+    _frameContainerColor   = Colors.white; 
     _frameContainerTexture = null;       
-    _frameShape = FrameShape.rectangle;
+    _frameShape            = FrameShape.rectangle;
     _stickers.clear();
-    _headlineText = '';
-    _textSize = 28;
-    _textRotation = 0;
-    _textPosition = const Offset(0, 0);
-    _selectedFrameWidth = null;
-    _selectedFrameHeight = null;
-    
+    _headlineText          = '';
+    _textSize              = 28;
+    _textRotation          = 0;
+    _textPosition          = const Offset(0, 0);
+    _selectedFrameWidth    = null;
+    _selectedFrameHeight   = null;
+    // _photoSlots      TIDAK direset — tetap sampai pilih frame baru
+    // _sessionDurationMin TIDAK direset — tetap dari API
+    // onSessionExpired TIDAK direset — dikontrol oleh widget
     notifyListeners();
   }
 

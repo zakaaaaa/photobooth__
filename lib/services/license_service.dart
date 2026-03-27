@@ -5,7 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 
 class LicenseService {
   // URL Endpoint (Sudah benar sesuai context sebelumnya)
-  final String _baseUrl = 'http://168.231.125.203:8080/api/photobooth/license/check';
+  final String _baseUrl = 'http://168.231.125.203:8181/api/photobooth/license/check';
 
   Future<Map<String, dynamic>> checkLicense() async {
     // PERUBAHAN 1: Panggil fungsi public (tanpa garis bawah)

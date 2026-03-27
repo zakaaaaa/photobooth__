@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/photo_provider.dart';
 import 'camera_page.dart';
-import 'static_frame_template_page.dart'; 
+import 'static_frame_template_page.dart';
 
 class FrameSelectionPage extends StatelessWidget {
   const FrameSelectionPage({super.key});
@@ -25,44 +25,41 @@ class FrameSelectionPage extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // HEADLINE (Tetap pakai Ambitsek biar konsisten sama judul lain)
+                // HEADLINE
                 const OutlinedText(
                   text: "CHOOSE\nCATEGORY TEMPLATE",
                   fontFamily: 'Ambitsek',
-                  fontSize: 65, 
-                  textColor: Color(0xFFFFED00), // Kuning
-                  outlineColor: Color(0xFFEF7D30), // Oranye
+                  fontSize: 65,
+                  textColor: Color(0xFFFFED00),
+                  outlineColor: Color(0xFFEF7D30),
                   fontWeight: FontWeight.w900,
                   letterSpacing: 1.0,
                   hasShadow: true,
                 ),
 
-                const SizedBox(height: 60), 
+                const SizedBox(height: 60),
 
-                // --- TOMBOL 1: STATIC FRAME (Pakai btn.png + Font Pixeland) ---
+                // --- TOMBOL 1: STATIC FRAME ---
                 ImageButton(
                   text: "Static Frame",
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => StaticFrameTemplatePage()), 
+                      MaterialPageRoute(builder: (context) => StaticFrameTemplatePage()),
                     );
                   },
                 ),
 
                 const SizedBox(height: 30),
 
-                // --- TOMBOL 2: DIY FRAME (Pakai btn.png + Font Pixeland) ---
+                // --- TOMBOL 2: DIY FRAME ---
                 ImageButton(
                   text: "DIY Frame",
                   onTap: () {
-                    // Set Provider: Custom Mode
                     Provider.of<PhotoProvider>(context, listen: false).setFrameMode(
                       FrameMode.custom,
-                      photoCount: 3, 
+                      photoCount: 3,
                     );
-                    
-                    // Langsung ke Camera Page
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => const CameraPage()),
@@ -71,9 +68,6 @@ class FrameSelectionPage extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 60),
-
-                // TOMBOL BACK
-
               ],
             ),
           ),
@@ -84,7 +78,7 @@ class FrameSelectionPage extends StatelessWidget {
 }
 
 // =========================================================
-// WIDGET BARU: IMAGE BUTTON (Pakai btn.png)
+// WIDGET: IMAGE BUTTON
 // =========================================================
 class ImageButton extends StatefulWidget {
   final String text;
@@ -113,28 +107,24 @@ class _ImageButtonState extends State<ImageButton> {
       },
       onTapCancel: () => setState(() => _isPressed = false),
       child: Transform.scale(
-        scale: _isPressed ? 0.95 : 1.0, // Efek mengecil saat ditekan
+        scale: _isPressed ? 0.95 : 1.0,
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // 1. GAMBAR TOMBOL (btn.png)
             Image.asset(
-              "assets/images/btn.png", 
-              width: 320, // Sesuaikan lebar tombol
-              height: 90, // Sesuaikan tinggi tombol
-              fit: BoxFit.contain, // Agar gambar tidak gepeng
+              "assets/images/btn.png",
+              width: 320,
+              height: 90,
+              fit: BoxFit.contain,
             ),
-
-            // 2. TEKS DI ATASNYA (Font Pixeland)
-            // Menggunakan Padding bottom sedikit karena biasanya tombol pixel ada efek 3D di bawah
             Padding(
-              padding: const EdgeInsets.only(bottom: 8.0), 
+              padding: const EdgeInsets.only(bottom: 8.0),
               child: Text(
                 widget.text,
                 style: const TextStyle(
-                  fontFamily: 'ambitsek', // <--- FONT BARU
-                  fontSize: 25, // Sesuaikan ukuran font pixeland (biasanya butuh lebih besar)
-                  color: Color.fromARGB(255, 255, 255, 255), // Sesuaikan dengan warna btn.png (biasanya teks hitam/putih)
+                  fontFamily: 'ambitsek',
+                  fontSize: 25,
+                  color: Color.fromARGB(255, 255, 255, 255),
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.5,
                 ),
@@ -148,7 +138,7 @@ class _ImageButtonState extends State<ImageButton> {
 }
 
 // =========================================================
-// WIDGET: OUTLINED TEXT (Helper untuk Judul)
+// WIDGET: OUTLINED TEXT
 // =========================================================
 class OutlinedText extends StatelessWidget {
   final String text;
@@ -183,7 +173,8 @@ class OutlinedText extends StatelessWidget {
               text,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,
+                fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight,
+                letterSpacing: letterSpacing, height: 1.2,
                 color: Colors.black.withValues(alpha: 0.6),
               ),
             ),
@@ -192,7 +183,8 @@ class OutlinedText extends StatelessWidget {
           text,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,
+            fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight,
+            letterSpacing: letterSpacing, height: 1.2,
             foreground: Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = outlineColor,
           ),
         ),
@@ -200,7 +192,8 @@ class OutlinedText extends StatelessWidget {
           text,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,
+            fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight,
+            letterSpacing: letterSpacing, height: 1.2,
             color: textColor,
           ),
         ),

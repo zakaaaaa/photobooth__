@@ -9,42 +9,45 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  http_parser: ^4.0.0
   
-  # Camera - versi yang kompatibel dengan macOS
-  url_launcher: ^6.2.0  
+  # Camera - cross platform
+  
   # Image processing
   image: ^4.1.7
-  camera: ^0.10.5+9
-  camera_windows: ^0.2.1+8
-  process_run: ^1.1.0
-  path_provider: ^2.1.0
   
   # State management
   provider: ^6.1.2
-  webview_windows: ^0.4.0
-  # Path
-
-
+  
+  # Utils
+  path_provider: ^2.1.0
   path: ^1.9.0
-  mailer: ^6.0.1
-
+  url_launcher: ^6.2.0
+  process_run: ^1.1.0
   
-  # Color picker
+  # UI
   flutter_colorpicker: ^1.0.3
+  qr_flutter: ^4.1.0
   
-  # Printing
+  # PDF & Print
   printing: ^5.12.0
   pdf: ^3.10.8
   file_picker: ^6.1.1
-  # Permission
+  
+  # Device info & Permission
   permission_handler: ^11.3.1
   device_info_plus: ^12.3.0
-  qr_flutter: ^4.1.0
+  
+  # Network
+  http: ^1.2.0
+  mailer: ^6.0.1
+  camera_macos: ^0.0.9
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  
 
 flutter:
   uses-material-design: true
@@ -55,7 +58,6 @@ flutter:
     - assets/stickers/
     - assets/filters/
     - assets/frames/
-    - assets/images/back_cam.png
   
   fonts:
     - family: Poppins
@@ -63,6 +65,9 @@ flutter:
         - asset: assets/fonts/Poppins-Regular.ttf
         - asset: assets/fonts/Poppins-Bold.ttf
           weight: 700
+    - family: Ambitsek
+      fonts:
         - asset: assets/fonts/ambitsek.ttf
+    - family: Pixeland
+      fonts:
         - asset: assets/fonts/Pixeland.ttf
-      

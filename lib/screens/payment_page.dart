@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:webview_windows/webview_windows.dart'; // Library Khusus Windows
 import '../providers/photo_provider.dart';
 import '../services/api_service.dart';
 import 'frame_selection_page.dart';
@@ -14,239 +13,225 @@ class PaymentPage extends StatefulWidget {
 }
 
 class _PaymentPageState extends State<PaymentPage> {
-  // State UI
-  bool _isSelectionMode = true; 
+  bool _isSelectionMode = true;
   bool _isLoading = false;
   bool _isPaid = false;
-  
-  // Payment Data
-  final double _sessionPrice = 500; // Pastikan harga sesuai dengan testing (misal 50000)
+
+  // Voucher state
+  bool _isVoucherMode = false;
+  final TextEditingController _voucherController = TextEditingController();
+  String _voucherError = "";
+  bool _isValidatingVoucher = false;
+
+  // QRIS state
+  String? _qrContent;
   Timer? _pollingTimer;
 
-  // WEBVIEW CONTROLLER (Engine Browser Windows)
-  final WebviewController _webviewController = WebviewController();
-  bool _isWebviewReady = false;
+  final double _sessionPrice = 500;
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
-    
-    // Bungkus dispose webview dalam try-catch
-    try {
-      if (_isWebviewReady) {
-        _webviewController.dispose();
-      }
-    } catch (e) {
-      debugPrint("WebView dispose error (Ignored): $e");
-    }
-    
+    _voucherController.dispose();
     super.dispose();
   }
 
-  // --- LOGIC 1: MEMILIH METODE PEMBAYARAN ---
-  void _onSelectQRIS() {
-    setState(() {
-      _isSelectionMode = false; 
-      _isLoading = true;
-    });
-    _initPaymentProcess();
-  }
-
-  void _onSelectVoucher() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Fitur Voucher akan segera hadir!")),
-    );
-  }
-
-  // --- LOGIC 2: PROSES REQUEST URL & EMBED WEBVIEW ---
-  void _initPaymentProcess() async {
-    final provider = Provider.of<PhotoProvider>(context, listen: false);
-    final apiService = Provider.of<ApiService>(context, listen: false);
-
-    // 1. PASTIKAN HWID SUDAH DILOAD (DINAMIS)
-    // HWID ini didapat dari PhotoProvider yang membaca Unique ID Windows
-    if (provider.machineId.isEmpty) {
-       await provider.initMachineId();
-    }
-
-    // A. Generate UUID Baru untuk sesi ini
-    String newUuid = "sesi-${DateTime.now().millisecondsSinceEpoch}";
-    provider.setSessionUuid(newUuid); 
-
-    // B. Start Session di Database (Mencatat sesi masuk DB)
-    // Parameter 'amount' di startSession adalah String
-    bool sessionCreated = await apiService.startSession(
-      newUuid, 
-      hwid: provider.machineId, // <--- WAJIB: Dikirim untuk validasi license
-      paymentMethod: 'qris', 
-      amount: _sessionPrice.toStringAsFixed(0)
-    );
-
-    if (!sessionCreated) {
-      _resetToMenu("Gagal membuat sesi database. Cek koneksi internet.");
-      return;
-    }
-
-    // C. Request URL DOKU (UPDATE PENTING DISINI)
-    // Sekarang kita wajib mengirim provider.machineId sebagai parameter ke-3
-    String? url = await apiService.generatePaymentLink(
-        newUuid, 
-        _sessionPrice, 
-        provider.machineId // <--- TAMBAHAN: Kirim HWID agar Laravel lolos validasi 'device_id'
-    );
-
-    if (mounted && url != null) {
-      try {
-        await _webviewController.initialize();
-        
-        // Listener URL untuk mendeteksi redirect sukses
-        _webviewController.url.listen((currentUrl) {
-           if (currentUrl.contains("google.com") || currentUrl.contains("success")) {
-             _handlePaymentSuccess(); 
-           }
-        });
-
-        // 1. LOAD URL DARI DOKU
-        await _webviewController.loadUrl(url);
-        
-        // 2. TAMPILKAN UI WEBVIEW
-        if (mounted) {
-          setState(() {
-            _isWebviewReady = true;
-            _isLoading = false; 
-          });
-          
-          // Mulai cek status pembayaran ke database secara berkala
-          _startPolling(newUuid);
-        }
-
-        // 3. AUTO SCROLL (Opsional, kadang webview Doku perlu di scroll sedikit)
-        await Future.delayed(const Duration(seconds: 2));
-        try {
-          await _webviewController.executeScript('window.scrollBy(0, 400);'); 
-        } catch (_) {}
-
-      } catch (e) {
-        _resetToMenu("Error WebView: Silakan install Edge WebView2 Runtime.");
-      }
-    } else {
-      _resetToMenu("Gagal mendapatkan link pembayaran.");
-    }
-  }
-
-  // --- LOGIC BARU: BYPASS PAYMENT (DEV MODE - LONG PRESS) ---
+  // ================================================================
+  // BYPASS — Long press pojok kiri bawah, tetap catat ke DB
+  // ================================================================
   void _triggerBypass() async {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
+    // ✅ Hanya reset — startSession() dipanggil di static_frame_template_page
+    // setelah session_duration_minutes dari API berhasil di-fetch
+    provider.reset();
+
     final apiService = Provider.of<ApiService>(context, listen: false);
 
-    if (provider.machineId.isEmpty) {
-       await provider.initMachineId();
-    }
+    if (provider.machineId.isEmpty) await provider.initMachineId();
 
-    String bypassUuid = "bypass-${DateTime.now().millisecondsSinceEpoch}";
-    
+    final bypassUuid = "bypass-${DateTime.now().millisecondsSinceEpoch}";
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text("🚀 DEV MODE: Mendaftarkan Sesi Gratis..."),
+        content: Text("🚀 DEV MODE: Mendaftarkan sesi bypass..."),
         duration: Duration(seconds: 2),
         backgroundColor: Colors.orange,
       ),
     );
 
-    bool success = await apiService.startSession(
-      bypassUuid, 
-      hwid: provider.machineId, 
-      paymentMethod: 'bypass', 
-      amount: '0' 
+    final success = await apiService.startSession(
+      bypassUuid,
+      hwid: provider.machineId,
+      paymentMethod: 'bypass',
+      amount: '0',
     );
 
     if (success) {
       provider.setSessionUuid(bypassUuid);
       _handlePaymentSuccess();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("❌ Gagal Bypass: Tidak bisa konek ke server."),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("❌ Gagal Bypass: Tidak bisa konek ke server."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  void _resetToMenu(String message) {
-    if (mounted) {
-      setState(() { _isLoading = false; _isSelectionMode = true; });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  // ================================================================
+  // QRIS FLOW
+  // ================================================================
+  void _onSelectQRIS() {
+    setState(() { _isSelectionMode = false; _isLoading = true; });
+    _initQrisPayment();
+  }
+
+  void _initQrisPayment() async {
+    final provider = Provider.of<PhotoProvider>(context, listen: false);
+    final apiService = Provider.of<ApiService>(context, listen: false);
+
+    if (provider.machineId.isEmpty) await provider.initMachineId();
+
+    final newUuid = "sesi-${DateTime.now().millisecondsSinceEpoch}";
+    provider.setSessionUuid(newUuid);
+
+    final sessionCreated = await apiService.startSession(
+      newUuid,
+      hwid: provider.machineId,
+      paymentMethod: 'qris',
+      amount: _sessionPrice.toStringAsFixed(0),
+    );
+
+    if (!sessionCreated) {
+      _resetToMenu("Gagal membuat sesi. Cek koneksi internet.");
+      return;
+    }
+
+    final qrContent = await apiService.generatePaymentLink(
+      newUuid, _sessionPrice, provider.machineId,
+    );
+
+    if (mounted && qrContent != null) {
+      setState(() { _qrContent = qrContent; _isLoading = false; });
+      _startPolling(newUuid);
+    } else {
+      _resetToMenu("Gagal mendapatkan QR payment.");
     }
   }
 
-  // --- LOGIC 3: POLLING STATUS ---
+  // ================================================================
+  // VOUCHER FLOW
+  // ================================================================
+  void _onSelectVoucher() {
+    setState(() { _isSelectionMode = false; _isVoucherMode = true; });
+  }
+
+  void _validateAndUseVoucher() async {
+    final code = _voucherController.text.trim().toUpperCase();
+    if (code.isEmpty) {
+      setState(() => _voucherError = "Masukkan kode voucher.");
+      return;
+    }
+
+    final provider = Provider.of<PhotoProvider>(context, listen: false);
+    final apiService = Provider.of<ApiService>(context, listen: false);
+
+    setState(() { _isValidatingVoucher = true; _voucherError = ""; });
+
+    if (provider.machineId.isEmpty) await provider.initMachineId();
+
+    final newUuid = "voucher-${DateTime.now().millisecondsSinceEpoch}";
+    provider.setSessionUuid(newUuid);
+
+    final success = await apiService.startSession(
+      newUuid,
+      hwid: provider.machineId,
+      paymentMethod: 'voucher',
+      amount: _sessionPrice.toStringAsFixed(0),
+      voucherCode: code,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      _handlePaymentSuccess();
+    } else {
+      setState(() {
+        _voucherError = "Kode voucher tidak valid atau sudah habis.";
+        _isValidatingVoucher = false;
+      });
+    }
+  }
+
+  // ================================================================
+  // POLLING & SUCCESS
+  // ================================================================
   void _startPolling(String uuid) {
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted) { timer.cancel(); return; }
       final apiService = Provider.of<ApiService>(context, listen: false);
-      
-      // Cek ke Laravel apakah status sesi sudah 'paid'
-      bool paid = await apiService.checkPaymentStatus(uuid);
-
-      if (paid) {
-        timer.cancel();
-        if (mounted) _handlePaymentSuccess();
-      }
+      final paid = await apiService.checkPaymentStatus(uuid);
+      if (paid) { timer.cancel(); if (mounted) _handlePaymentSuccess(); }
     });
   }
 
   void _handlePaymentSuccess() {
     _pollingTimer?.cancel();
-    if (_isPaid) return; 
-
+    if (_isPaid) return;
     if (mounted) {
-      setState(() { _isPaid = true; });
-      
+      setState(() => _isPaid = true);
+      // ✅ Hanya reset — startSession() dipanggil di static_frame_template_page
+      // setelah session_duration_minutes dari API berhasil di-fetch
       Provider.of<PhotoProvider>(context, listen: false).reset();
-
-      Future.delayed(const Duration(seconds: 2), () {
+      Future.delayed(const Duration(seconds: 1), () {
         if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const FrameSelectionPage()),
+            MaterialPageRoute(builder: (_) => const FrameSelectionPage()),
           );
         }
       });
     }
   }
 
-  // =========================================================================
-  // UI BUILDER
-  // =========================================================================
+  void _resetToMenu(String message) {
+    if (mounted) {
+      setState(() { _isLoading = false; _isSelectionMode = true; _isVoucherMode = false; _qrContent = null; });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  // ================================================================
+  // BUILD
+  // ================================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. BACKGROUND
+          // Background
           Positioned.fill(
             child: Image.asset("assets/images/bg.png", fit: BoxFit.cover),
           ),
 
-          // 2. KONTEN UTAMA
+          // Konten
           Center(
-            child: _isSelectionMode 
-              ? _buildSelectionMenu() 
-              : _buildPaymentContainer(), 
+            child: _isSelectionMode
+                ? _buildSelectionMenu()
+                : _isVoucherMode
+                    ? _buildVoucherInput()
+                    : _buildQrisView(),
           ),
 
-          // 3. HIDDEN BYPASS BUTTON (POJOK KIRI BAWAH)
+          // ✅ Bypass button — long press pojok kiri bawah
           Positioned(
-            bottom: 0,
-            left: 0,
+            bottom: 0, left: 0,
             child: GestureDetector(
               onLongPress: _triggerBypass,
-              child: Container(
-                width: 60,
-                height: 60,
-                color: Colors.transparent, 
-              ),
+              child: Container(width: 80, height: 80, color: Colors.transparent),
             ),
           ),
         ],
@@ -254,14 +239,16 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // TAMPILAN MENU
+  // ── MENU PILIHAN ──
   Widget _buildSelectionMenu() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const OutlinedText(
           text: "CHOOSE\nPAYMENT METHOD",
-          fontFamily: 'Ambitsek', fontSize: 70, textColor: Color(0xFFFFED00), outlineColor: Color(0xFFEF7D30), fontWeight: FontWeight.w900, letterSpacing: 1.0, hasShadow: true,
+          fontFamily: 'Ambitsek', fontSize: 70,
+          textColor: Color(0xFFFFED00), outlineColor: Color(0xFFEF7D30),
+          fontWeight: FontWeight.w900, letterSpacing: 1.0, hasShadow: true,
         ),
         const SizedBox(height: 50),
         Row(
@@ -276,158 +263,183 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // TAMPILAN KOTAK PEMBAYARAN (WEBVIEW CONTAINER)
-  Widget _buildPaymentContainer() {
+  // ── QRIS VIEW ──
+  Widget _buildQrisView() {
     return Container(
-      width: 500, 
-      height: 650, 
-      padding: const EdgeInsets.all(4),
+      width: 420, padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFFC0C0C0), 
+        color: const Color(0xFFC0C0C0),
         border: Border.all(width: 3, color: Colors.black),
-        boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(10, 10), blurRadius: 0)],
+        boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(10, 10))],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // HEADER KOTAK
           Container(
-            height: 35,
-            color: const Color(0xFF0000AA),
-            child: const Center(
-              child: Text("DOKU PAYMENT GATEWAY", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            ),
+            width: double.infinity, height: 32, color: const Color(0xFF0000AA),
+            child: const Center(child: Text("PAYMENT GATEWAY", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1))),
           ),
-          
-          // AREA KONTEN (WEBVIEW DISINI)
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: Colors.black54, width: 2), 
-              ),
-              child: _isPaid 
-                ? _buildSuccessView()
-                : (_isLoading || !_isWebviewReady)
-                    ? const Center(child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 10),
-                          Text("Connecting to DOKU...")
-                        ],
-                      ))
-                    : Webview(_webviewController), 
-            ),
-          ),
-
-          // FOOTER (TOMBOL BATAL)
-          if (!_isPaid)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  shape: const BeveledRectangleBorder(),
+          const SizedBox(height: 16),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.all(40),
+              child: Column(children: [CircularProgressIndicator(), SizedBox(height: 12), Text("Memuat QR Code...")]),
+            )
+          else if (_isPaid)
+            _buildSuccessView()
+          else if (_qrContent != null)
+            Column(
+              children: [
+                const Text("Scan QR berikut untuk membayar:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  color: Colors.white,
+                  child: Text(_qrContent!, style: const TextStyle(fontSize: 11, fontFamily: 'monospace'), textAlign: TextAlign.center),
                 ),
-                onPressed: () {
-                  _pollingTimer?.cancel();
-                  setState(() { _isSelectionMode = true; _isWebviewReady = false; });
-                },
-                child: const Text("CANCEL TRANSACTION"),
-              ),
+                const SizedBox(height: 8),
+                const Text("Menunggu konfirmasi pembayaran...", style: TextStyle(fontSize: 12, color: Colors.black54)),
+              ],
+            ),
+          const SizedBox(height: 16),
+          if (!_isPaid)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, shape: const BeveledRectangleBorder()),
+              onPressed: () { _pollingTimer?.cancel(); _resetToMenu("Transaksi dibatalkan."); },
+              child: const Text("CANCEL"),
             ),
         ],
       ),
     );
   }
 
+  // ── VOUCHER INPUT ──
+  Widget _buildVoucherInput() {
+    return Container(
+      width: 420, padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFC0C0C0),
+        border: Border.all(width: 3, color: Colors.black),
+        boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(10, 10))],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: double.infinity, height: 32, color: const Color(0xFF0000AA),
+            child: const Center(child: Text("MASUKKAN VOUCHER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1))),
+          ),
+          const SizedBox(height: 20),
+
+          if (_isPaid)
+            _buildSuccessView()
+          else ...[
+            const Text("Masukkan kode voucher kamu:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 12),
+
+            TextField(
+              controller: _voucherController,
+              textCapitalization: TextCapitalization.characters,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 4),
+              decoration: InputDecoration(
+                hintText: "XXXXX",
+                hintStyle: const TextStyle(color: Colors.black38),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                errorText: _voucherError.isNotEmpty ? _voucherError : null,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0000AA),
+                  foregroundColor: Colors.white,
+                  shape: const BeveledRectangleBorder(),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: _isValidatingVoucher ? null : _validateAndUseVoucher,
+                child: _isValidatingVoucher
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text("GUNAKAN VOUCHER", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            TextButton(
+              onPressed: () => setState(() { _isVoucherMode = false; _isSelectionMode = true; _voucherError = ""; _voucherController.clear(); }),
+              child: const Text("← Kembali", style: TextStyle(color: Colors.black54)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildSuccessView() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return const Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.check_circle, color: Colors.green, size: 80),
-        const SizedBox(height: 20),
-        const Text("PAYMENT RECEIVED!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Ambitsek')),
-        const SizedBox(height: 10),
-        const Text("Redirecting to frame selection...", style: TextStyle(fontSize: 14)),
+        SizedBox(height: 20),
+        Icon(Icons.check_circle, color: Colors.green, size: 72),
+        SizedBox(height: 12),
+        Text("BERHASIL!", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Ambitsek')),
+        SizedBox(height: 6),
+        Text("Menuju pemilihan frame...", style: TextStyle(fontSize: 13, color: Colors.black54)),
+        SizedBox(height: 20),
       ],
     );
   }
 }
 
-// ... Widget PixelCard dan OutlinedText tetap sama seperti sebelumnya ...
-// Silakan paste ulang widget PixelCard dan OutlinedText di bawah sini jika perlu, 
-// tapi bagian logic utamanya ada di atas.
+// =========================================================
+// WIDGETS
+// =========================================================
 class PixelCard extends StatefulWidget {
   final String title;
-  final String imagePath; 
+  final String imagePath;
   final VoidCallback onTap;
-
-  const PixelCard({
-    super.key,
-    required this.title,
-    required this.imagePath,
-    required this.onTap,
-  });
-
+  const PixelCard({super.key, required this.title, required this.imagePath, required this.onTap});
   @override
   State<PixelCard> createState() => _PixelCardState();
 }
 
 class _PixelCardState extends State<PixelCard> {
   bool _isPressed = false;
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap();
-      },
+      onTapUp: (_) { setState(() => _isPressed = false); widget.onTap(); },
       onTapCancel: () => setState(() => _isPressed = false),
       child: Transform.scale(
         scale: _isPressed ? 0.95 : 1.0,
         child: Container(
-          width: 300,
-          height: 320,
+          width: 300, height: 320,
           decoration: BoxDecoration(
-            color: const Color(0xFFC0C0C0), // Abu-abu Windows 95
+            color: const Color(0xFFC0C0C0),
             border: Border.all(width: 3, color: Colors.black),
-            boxShadow: _isPressed 
-                ? [] 
-                : const [BoxShadow(color: Colors.black54, offset: Offset(6, 6), blurRadius: 0)],
+            boxShadow: _isPressed ? [] : const [BoxShadow(color: Colors.black54, offset: Offset(6, 6))],
           ),
           child: Column(
             children: [
-              // HEADER BIRU
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                color: const Color(0xFF0000AA), // Biru Tua Retro
-                child: Text(
-                  widget.title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: 'Ambitsek',
-                    color: Colors.white,
-                    fontSize: 15,
-                    letterSpacing: 2,
-                  ),
-                ),
+                width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 8),
+                color: const Color(0xFF0000AA),
+                child: Text(widget.title, textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Ambitsek', color: Colors.white, fontSize: 15, letterSpacing: 2)),
               ),
-              
-              // BODY GAMBAR
               Expanded(
                 child: Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(15.0),
-                    child: Image.asset(
-                      widget.imagePath, 
-                      fit: BoxFit.contain, 
-                    ),
+                    padding: const EdgeInsets.all(15),
+                    child: Image.asset(widget.imagePath, fit: BoxFit.contain),
                   ),
                 ),
               ),
@@ -450,49 +462,18 @@ class OutlinedText extends StatelessWidget {
   final bool hasShadow;
 
   const OutlinedText({
-    super.key,
-    required this.text,
-    required this.fontFamily,
-    required this.fontSize,
-    required this.textColor,
-    required this.outlineColor,
-    this.fontWeight = FontWeight.normal,
-    this.letterSpacing = 0.0,
-    this.hasShadow = false,
+    super.key, required this.text, required this.fontFamily,
+    required this.fontSize, required this.textColor, required this.outlineColor,
+    this.fontWeight = FontWeight.normal, this.letterSpacing = 0.0, this.hasShadow = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        if (hasShadow)
-          Positioned(
-            top: 4, left: 4,
-            child: Text(
-              text,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,
-                color: Colors.black.withOpacity(0.6),
-              ),
-            ),
-          ),
-        Text(
-          text,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,
-            foreground: Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = outlineColor,
-          ),
-        ),
-        Text(
-          text,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,
-            color: textColor,
-          ),
-        ),
+        if (hasShadow) Positioned(top: 4, left: 4, child: Text(text, textAlign: TextAlign.center, style: TextStyle(fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2, color: Colors.black.withOpacity(0.6)))),
+        Text(text, textAlign: TextAlign.center, style: TextStyle(fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2, foreground: Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = outlineColor)),
+        Text(text, textAlign: TextAlign.center, style: TextStyle(fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2, color: textColor)),
       ],
     );
   }
