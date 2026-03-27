@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show compute, consolidateHttpClientResponseBytes;
 import 'package:flutter/material.dart';
-import 'package:camera_macos/camera_macos.dart';
+import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
@@ -38,8 +38,8 @@ class CameraPage extends StatefulWidget {
 }
 
 class _CameraPageState extends State<CameraPage> {
-  CameraMacOSController? _cameraController;
-  final GlobalKey _cameraKey = GlobalKey();
+  CameraController? _cameraController;
+  List<CameraDescription> _cameras = [];
   bool _isCameraInitialized = false;
   String _debugMessage      = "Mendeteksi kamera...";
 
@@ -100,24 +100,49 @@ class _CameraPageState extends State<CameraPage> {
       final provider = Provider.of<PhotoProvider>(context, listen: false);
       _lockedFilter = provider.selectedFilter;
     });
+    _initCamera();
   }
 
   @override
   void dispose() {
-    _cameraController?.destroy();
+    _cameraController?.dispose();
     super.dispose();
   }
 
   // ================================================================
   // INIT CAMERA
   // ================================================================
-  void _onCameraInizialized(CameraMacOSController controller) {
-    setState(() {
-      _cameraController    = controller;
-      _isCameraInitialized = true;
-      _debugMessage        = "";
-    });
-    debugPrint("✅ Camera macOS initialized!");
+  Future<void> _initCamera() async {
+    try {
+      _cameras = await availableCameras();
+      if (_cameras.isEmpty) {
+        if (mounted) setState(() => _debugMessage = "Kamera tidak ditemukan");
+        return;
+      }
+      
+      final camera = _cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => _cameras.first,
+      );
+      
+      _cameraController = CameraController(
+        camera,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      
+      await _cameraController!.initialize();
+      if (!mounted) return;
+      
+      setState(() {
+        _isCameraInitialized = true;
+        _debugMessage = "";
+      });
+      debugPrint("✅ Camera initialized!");
+    } catch (e) {
+      if (mounted) setState(() => _debugMessage = "Error kamera: $e");
+      debugPrint("❌ Camera error: $e");
+    }
   }
 
   // ── FIX: _getLiveFilter pakai _lockedFilter saat sesi aktif ──
@@ -219,12 +244,11 @@ class _CameraPageState extends State<CameraPage> {
   // AMBIL FOTO
   // ================================================================
   Future<void> _takePictureAndSave() async {
-    if (_cameraController == null) return;
+    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
     try {
-      final CameraMacOSFile? result = await _cameraController!.takePicture();
-      if (result == null || result.bytes == null) { debugPrint("❌ Foto null"); return; }
+      final XFile result = await _cameraController!.takePicture();
+      final Uint8List raw = await result.readAsBytes();
 
-      final Uint8List raw = result.bytes!;
       if (!mounted) return;
 
       final provider = Provider.of<PhotoProvider>(context, listen: false);
@@ -557,17 +581,18 @@ class _CameraPageState extends State<CameraPage> {
           // ── 1. CAMERA PREVIEW dengan filter ──
           ColorFiltered(
             colorFilter: _getLiveFilter(filter),
-            child: CameraMacOSView(
-              key: _cameraKey,
-              cameraMode: CameraMacOSMode.photo,
-              enableAudio: false,
-              onCameraInizialized: _onCameraInizialized,
-              onCameraDestroyed: () {
-                debugPrint("📷 Camera destroyed");
-                return Container();
-              },
-              fit: BoxFit.cover,
-            ),
+            child: _cameraController != null && _cameraController!.value.isInitialized
+                ? SizedBox.expand(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: _cameraController!.value.previewSize?.width ?? 1,
+                        height: _cameraController!.value.previewSize?.height ?? 1,
+                        child: CameraPreview(_cameraController!),
+                      ),
+                    ),
+                  )
+                : const SizedBox(),
           ),
 
           // Loading overlay kamera belum siap
