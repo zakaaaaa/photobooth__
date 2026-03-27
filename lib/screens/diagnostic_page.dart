@@ -508,11 +508,22 @@ startxref
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0F),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Row(
-          children: [
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background retro
+          Image.asset(
+            'assets/images/splash_background.png',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(color: Colors.black),
+          ),
+          // Overlay gelap
+          Container(color: Colors.black.withOpacity(0.4)),
+          // Konten
+          FadeTransition(
+            opacity: _fadeAnimation,
+            child: Row(
+              children: [
             // ── LEFT PANEL: Checks ──
             Expanded(
               flex: 3,
@@ -525,21 +536,28 @@ startxref
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.08),
+                              color: Colors.black,
+                              width: 3,
                             ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black,
+                                offset: Offset(4, 4),
+                              ),
+                            ],
                           ),
                           child: const Icon(
-                            Icons.monitor_heart_outlined,
-                            color: Colors.white70,
-                            size: 24,
+                            Icons.monitor_heart,
+                            color: Colors.black,
+                            size: 28,
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 20),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -548,18 +566,31 @@ startxref
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.0,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black,
+                                    offset: Offset(3, 3),
+                                  ),
+                                ],
                               ),
                             ),
-                            Text(
-                              'HWID: ${_hwid.isNotEmpty ? _hwid.substring(0, _hwid.length > 20 ? 20 : _hwid.length) + '...' : 'detecting...'}',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                color: Colors.white.withOpacity(0.35),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w400,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'HWID: ${_hwid.isNotEmpty ? _hwid.substring(0, _hwid.length > 20 ? 20 : _hwid.length) + '...' : 'detecting...'}',
+                                style: const TextStyle(
+                                  fontFamily: 'Poppins',
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ],
@@ -670,8 +701,8 @@ startxref
                             });
                             _runAllChecks();
                           },
-                          color: Colors.white.withOpacity(0.08),
-                          textColor: Colors.white70,
+                          color: Colors.white,
+                          textColor: Colors.black,
                         ),
 
                         const SizedBox(width: 12),
@@ -711,11 +742,11 @@ startxref
                               onTap: _allDone ? _proceedToApp : null,
                               color: _allDone
                                   ? (_allPassed
-                                      ? const Color(0xFF00BFA5)
-                                      : const Color(0xFFFF9800))
-                                  : Colors.white.withOpacity(0.05),
+                                      ? const Color(0xFF00BFA5) // Teal
+                                      : const Color(0xFFFF9800)) // Orange
+                                  : Colors.grey[300]!,
                               textColor:
-                                  _allDone ? Colors.white : Colors.white38,
+                                  _allDone ? Colors.white : Colors.black38,
                             ),
                           ),
                         ),
@@ -732,30 +763,37 @@ startxref
               margin: const EdgeInsets.all(20),
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.03),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.06),
+                  color: Colors.black,
+                  width: 4,
                 ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black,
+                    offset: Offset(6, 6),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.history,
-                        color: Colors.white.withOpacity(0.4),
+                        color: Colors.black87,
                         size: 16,
                       ),
                       const SizedBox(width: 8),
-                      Text(
+                      const Text(
                         'Hasil Foto Terakhir',
                         style: TextStyle(
                           fontFamily: 'Poppins',
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                          color: Colors.black87,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
@@ -765,26 +803,27 @@ startxref
                     child: _photosStatus == _CheckStatus.loading
                         ? const Center(
                             child: CircularProgressIndicator(
-                              color: Colors.white24,
-                              strokeWidth: 2,
+                              color: Colors.black45,
+                              strokeWidth: 3,
                             ),
                           )
                         : _recentPhotos.isEmpty
-                            ? Center(
+                            ? const Center(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
                                       Icons.photo_library_outlined,
-                                      color: Colors.white.withOpacity(0.1),
+                                      color: Colors.black26,
                                       size: 48,
                                     ),
-                                    const SizedBox(height: 12),
+                                    SizedBox(height: 12),
                                     Text(
                                       'Belum ada foto',
                                       style: TextStyle(
-                                        color: Colors.white.withOpacity(0.25),
-                                        fontSize: 13,
+                                        color: Colors.black54,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ],
@@ -810,6 +849,8 @@ startxref
             ),
           ],
         ),
+      ),
+        ],
       ),
     );
   }
@@ -851,13 +892,18 @@ startxref
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(14),
+        color: status == _CheckStatus.loading ? Colors.grey[800] : Colors.white,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: status == _CheckStatus.loading
-              ? Colors.white.withOpacity(0.05)
-              : statusColor.withOpacity(0.15),
+          color: Colors.black,
+          width: 3,
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black,
+            offset: Offset(4, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -878,11 +924,11 @@ startxref
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Poppins',
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                        color: status == _CheckStatus.loading ? Colors.white : Colors.black,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -890,8 +936,9 @@ startxref
                       message,
                       style: TextStyle(
                         fontFamily: 'Poppins',
-                        color: Colors.white.withOpacity(0.4),
-                        fontSize: 11,
+                        color: status == _CheckStatus.loading ? Colors.white70 : Colors.black87,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -933,13 +980,14 @@ startxref
       child: Row(
         children: [
           Container(
-            width: 8,
-            height: 8,
+            width: 10,
+            height: 10,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
+              border: Border.all(color: Colors.black, width: 1.5),
               color: printer.isAvailable
                   ? const Color(0xFF4CAF50)
-                  : Colors.white24,
+                  : Colors.grey[400],
             ),
           ),
           const SizedBox(width: 10),
@@ -949,9 +997,10 @@ startxref
               style: TextStyle(
                 fontFamily: 'Poppins',
                 color: printer.isAvailable
-                    ? Colors.white.withOpacity(0.7)
-                    : Colors.white.withOpacity(0.3),
-                fontSize: 11,
+                    ? Colors.black87
+                    : Colors.black38,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -960,15 +1009,15 @@ startxref
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: Colors.black12,
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Text(
+              child: const Text(
                 'DEFAULT',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.3),
-                  fontSize: 8,
-                  fontWeight: FontWeight.w600,
+                  color: Colors.black54,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
                   letterSpacing: 0.5,
                 ),
               ),
@@ -1140,11 +1189,18 @@ startxref
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(12),
+          color: onTap == null ? Colors.grey[300] : color,
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: Colors.white.withOpacity(0.06),
+            color: Colors.black,
+            width: 3,
           ),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black,
+              offset: Offset(4, 4),
+            ),
+          ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
