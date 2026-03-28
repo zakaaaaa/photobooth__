@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:photobooth_app/providers/photo_provider.dart';
 import 'package:photobooth_app/screens/diagnostic_page.dart';
 import 'package:photobooth_app/screens/splash_screen.dart';
@@ -10,6 +13,25 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Fullscreen setup ──
+  await windowManager.ensureInitialized();
+
+  WindowOptions windowOptions = const WindowOptions(
+    fullScreen: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    titleBarStyle: TitleBarStyle.hidden,
+  );
+
+  await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.setFullScreen(true);
+    await windowManager.setAlwaysOnTop(true);
+    await windowManager.setSkipTaskbar(true);
+    await windowManager.show();
+    await windowManager.focus();
+  });
+
   runApp(const MyApp());
 }
 
@@ -21,7 +43,6 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-
   @override
   void initState() {
     super.initState();
@@ -72,9 +93,8 @@ class _MyAppState extends State<MyApp> {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _setupSessionExpiredCallback();
           });
-          return _TimerBadgeOverlay(child: child!);
+          return _AppOverlay(child: child!);
         },
-        // ✅ DiagnosticPage sebagai halaman pertama
         home: const DiagnosticPage(),
       ),
     );
@@ -82,24 +102,34 @@ class _MyAppState extends State<MyApp> {
 }
 
 // ─────────────────────────────────────────────────────────
-// Timer badge overlay — tidak berubah
+// App overlay — gabungan timer badge + hidden close button
 // ─────────────────────────────────────────────────────────
-class _TimerBadgeOverlay extends StatelessWidget {
+class _AppOverlay extends StatelessWidget {
   final Widget child;
-  const _TimerBadgeOverlay({required this.child});
+  const _AppOverlay({required this.child});
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         child,
+
+        // ── Hidden close button (top center, hold 3 detik untuk close) ──
+        const Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: Center(child: _HiddenCloseButton()),
+        ),
+
+        // ── Timer badge ──
         Consumer<PhotoProvider>(
           builder: (context, provider, _) {
             if (!provider.isSessionActive) return const SizedBox.shrink();
 
             final progress = provider.timerProgress;
-            final color    = provider.timerColor;
-            final timeStr  = provider.timerString;
+            final color = provider.timerColor;
+            final timeStr = provider.timerString;
             final isUrgent = progress < 0.2;
 
             return Positioned(
@@ -108,20 +138,24 @@ class _TimerBadgeOverlay extends StatelessWidget {
               child: SafeArea(
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(isUrgent ? 0.88 : 0.65),
+                    color: Colors.black
+                        .withValues(alpha: isUrgent ? 0.88 : 0.65),
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: color.withOpacity(0.8),
+                      color: color.withValues(alpha: 0.8),
                       width: isUrgent ? 1.5 : 1.0,
                     ),
                     boxShadow: isUrgent
-                        ? [BoxShadow(
-                            color: color.withOpacity(0.35),
-                            blurRadius: 14,
-                            spreadRadius: 2,
-                          )]
+                        ? [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.35),
+                              blurRadius: 14,
+                              spreadRadius: 2,
+                            )
+                          ]
                         : [],
                   ),
                   child: Row(
@@ -133,8 +167,10 @@ class _TimerBadgeOverlay extends StatelessWidget {
                         child: CircularProgressIndicator(
                           value: progress,
                           strokeWidth: 2.5,
-                          backgroundColor: Colors.white.withOpacity(0.15),
-                          valueColor: AlwaysStoppedAnimation<Color>(color),
+                          backgroundColor:
+                              Colors.white.withValues(alpha: 0.15),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(color),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -156,6 +192,112 @@ class _TimerBadgeOverlay extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Hidden close button — hold 3 detik di tengah atas untuk exit
+// ─────────────────────────────────────────────────────────
+class _HiddenCloseButton extends StatefulWidget {
+  const _HiddenCloseButton();
+
+  @override
+  State<_HiddenCloseButton> createState() => _HiddenCloseButtonState();
+}
+
+class _HiddenCloseButtonState extends State<_HiddenCloseButton> {
+  bool _isHolding = false;
+  double _holdProgress = 0.0;
+  Timer? _holdTimer;
+  static const _holdDuration = Duration(seconds: 3);
+  static const _tickInterval = Duration(milliseconds: 50);
+
+  void _onLongPressStart(LongPressStartDetails _) {
+    setState(() {
+      _isHolding = true;
+      _holdProgress = 0.0;
+    });
+
+    final totalTicks =
+        _holdDuration.inMilliseconds / _tickInterval.inMilliseconds;
+
+    _holdTimer = Timer.periodic(_tickInterval, (timer) {
+      setState(() {
+        _holdProgress += 1.0 / totalTicks;
+      });
+
+      if (_holdProgress >= 1.0) {
+        timer.cancel();
+        _closeApp();
+      }
+    });
+  }
+
+  void _onLongPressEnd(LongPressEndDetails _) {
+    _cancelHold();
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _isHolding = false;
+        _holdProgress = 0.0;
+      });
+    }
+  }
+
+  Future<void> _closeApp() async {
+    await windowManager.setFullScreen(false);
+    await windowManager.setAlwaysOnTop(false);
+    await windowManager.close();
+  }
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onLongPressStart: _onLongPressStart,
+      onLongPressEnd: _onLongPressEnd,
+      onLongPressCancel: _cancelHold,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 100,
+        height: 30,
+        decoration: BoxDecoration(
+          color: _isHolding
+              ? Colors.red.withValues(alpha: 0.3)
+              : Colors.transparent,
+          borderRadius: const BorderRadius.only(
+            bottomLeft: Radius.circular(12),
+            bottomRight: Radius.circular(12),
+          ),
+        ),
+        child: _isHolding
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  SizedBox(
+                    width: 80,
+                    height: 3,
+                    child: LinearProgressIndicator(
+                      value: _holdProgress,
+                      backgroundColor: Colors.white24,
+                      valueColor:
+                          const AlwaysStoppedAnimation<Color>(Colors.red),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
+              )
+            : null,
+      ),
     );
   }
 }

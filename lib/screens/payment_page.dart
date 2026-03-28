@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_windows/webview_windows.dart';
@@ -24,13 +25,23 @@ class _PaymentPageState extends State<PaymentPage> {
   String _voucherError = "";
   bool _isValidatingVoucher = false;
 
-  // WebView state (menggantikan QRIS state)
-  String? _paymentUrl;
+  // WebView state
   Timer? _pollingTimer;
   final WebviewController _webviewController = WebviewController();
   bool _isWebViewReady = false;
 
+  // ── DEBUG STATE ──
+  final List<String> _debugLogs = [];
+  String _webViewError = "";
+  bool _showDebugPanel = false;
+
   final double _sessionPrice = 500;
+
+  @override
+  void initState() {
+    super.initState();
+    _runEnvironmentCheck();
+  }
 
   @override
   void dispose() {
@@ -38,6 +49,62 @@ class _PaymentPageState extends State<PaymentPage> {
     _voucherController.dispose();
     _webviewController.dispose();
     super.dispose();
+  }
+
+  // ================================================================
+  // DEBUG HELPERS
+  // ================================================================
+  void _log(String message) {
+    final timestamp = DateTime.now().toIso8601String().substring(11, 23);
+    final entry = "[$timestamp] $message";
+    debugPrint("🔍 WEBVIEW_DEBUG: $entry");
+    if (mounted) {
+      setState(() => _debugLogs.add(entry));
+    }
+  }
+
+  /// Run environment diagnostics on page load
+  Future<void> _runEnvironmentCheck() async {
+    _log("=== ENVIRONMENT CHECK START ===");
+    _log("Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}");
+    _log("Dart version: ${Platform.version}");
+    _log("Executable: ${Platform.resolvedExecutable}");
+
+    // Check WebView2 Runtime availability
+    try {
+      final webviewVersion = await WebviewController.getWebViewVersion();
+      _log("✅ WebView2 Runtime version: $webviewVersion");
+    } catch (e) {
+      _log("❌ WebView2 Runtime NOT FOUND or error: $e");
+      _log("   → Install from: https://developer.microsoft.com/en-us/microsoft-edge/webview2/");
+    }
+
+    // Check network connectivity to common endpoints
+    _log("--- Network connectivity test ---");
+    for (final host in ['google.com', 'doku.com', '8.8.8.8']) {
+      try {
+        final result = await InternetAddress.lookup(host)
+            .timeout(const Duration(seconds: 5));
+        if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
+          _log("✅ DNS resolve OK: $host → ${result[0].address}");
+        }
+      } catch (e) {
+        _log("❌ DNS resolve FAIL: $host → $e");
+      }
+    }
+
+    // Check environment variables that might affect WebView
+    final envVars = [
+      'WEBVIEW2_BROWSER_EXECUTABLE_FOLDER',
+      'WEBVIEW2_USER_DATA_FOLDER',
+      'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS',
+    ];
+    for (final v in envVars) {
+      final val = Platform.environment[v];
+      _log("ENV $v = ${val ?? '(not set)'}");
+    }
+
+    _log("=== ENVIRONMENT CHECK END ===");
   }
 
   // ================================================================
@@ -53,6 +120,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
     final bypassUuid = "bypass-${DateTime.now().millisecondsSinceEpoch}";
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text("🚀 DEV MODE: Mendaftarkan sesi bypass..."),
@@ -84,12 +152,14 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   // ================================================================
-  // QRIS FLOW (sekarang membuka WebView)
+  // QRIS FLOW (WebView)
   // ================================================================
   void _onSelectQRIS() {
+    _log("User selected QRIS payment");
     setState(() {
       _isSelectionMode = false;
       _isLoading = true;
+      _webViewError = "";
     });
     _initQrisPayment();
   }
@@ -98,11 +168,17 @@ class _PaymentPageState extends State<PaymentPage> {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     final apiService = Provider.of<ApiService>(context, listen: false);
 
-    if (provider.machineId.isEmpty) await provider.initMachineId();
+    if (provider.machineId.isEmpty) {
+      _log("Machine ID empty, initializing...");
+      await provider.initMachineId();
+    }
+    _log("Machine ID: ${provider.machineId}");
 
     final newUuid = "sesi-${DateTime.now().millisecondsSinceEpoch}";
     provider.setSessionUuid(newUuid);
+    _log("Session UUID: $newUuid");
 
+    _log("Creating session on backend...");
     final sessionCreated = await apiService.startSession(
       newUuid,
       hwid: provider.machineId,
@@ -111,45 +187,129 @@ class _PaymentPageState extends State<PaymentPage> {
     );
 
     if (!sessionCreated) {
+      _log("❌ Backend session creation FAILED");
       _resetToMenu("Gagal membuat sesi. Cek koneksi internet.");
       return;
     }
+    _log("✅ Backend session created");
 
-    // Dapatkan payment_url dari backend
+    _log("Requesting payment link from backend...");
     final paymentUrl = await apiService.generatePaymentLink(newUuid);
+    _log("Payment URL response: $paymentUrl");
 
     if (mounted && paymentUrl != null) {
-      // Inisialisasi WebView dan load URL
+      _log("Initializing WebView with URL: $paymentUrl");
       await _initWebView(paymentUrl);
-      setState(() {
-        _paymentUrl = paymentUrl;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
       _startPolling(newUuid);
     } else {
+      _log("❌ Payment URL is null or widget not mounted");
       _resetToMenu("Gagal mendapatkan halaman pembayaran.");
     }
   }
 
   Future<void> _initWebView(String url) async {
-    try {
-      await _webviewController.initialize();
-      await _webviewController.setBackgroundColor(Colors.white);
+    _log("--- WebView Init START ---");
 
-      // Listen for page load completion to inject JS
+    // Step 1: Check WebView2 version again right before init
+    try {
+      final version = await WebviewController.getWebViewVersion();
+      _log("Step 1/5: WebView2 version confirmed: $version");
+    } catch (e) {
+      _log("Step 1/5: ❌ WebView2 version check FAILED: $e");
+      if (mounted) {
+        setState(() => _webViewError =
+            "WebView2 Runtime tidak ditemukan.\n\nInstall dari:\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/\n\nError: $e");
+      }
+      return;
+    }
+
+    // Step 2: Initialize controller
+    try {
+      _log("Step 2/5: Calling _webviewController.initialize()...");
+      await _webviewController.initialize();
+      _log("Step 2/5: ✅ Controller initialized");
+    } catch (e, stack) {
+      _log("Step 2/5: ❌ Controller initialize FAILED: $e");
+      _log("Stack: $stack");
+      if (mounted) {
+        setState(() => _webViewError =
+            "WebView controller gagal initialize.\n\nError: $e\n\nCoba:\n1. Restart aplikasi\n2. Jalankan sebagai Administrator\n3. Update WebView2 Runtime");
+      }
+      return;
+    }
+
+    // Step 3: Set background color
+    try {
+      _log("Step 3/5: Setting background color...");
+      await _webviewController.setBackgroundColor(Colors.white);
+      _log("Step 3/5: ✅ Background color set");
+    } catch (e) {
+      _log("Step 3/5: ⚠️ setBackgroundColor failed (non-critical): $e");
+    }
+
+    // Step 4: Register event listeners
+    try {
+      _log("Step 4/5: Registering event listeners...");
+
       _webviewController.loadingState.listen((state) {
+        _log("📡 LoadingState changed: $state");
         if (state == LoadingState.navigationCompleted) {
+          _log("✅ Navigation completed — injecting QRIS auto-select script");
           _injectAutoSelectQrisScript();
         }
       });
 
+      _webviewController.url.listen((url) {
+        _log("📡 URL changed: $url");
+      });
+
+      // WebErrorStatus is an enum, not an object with .errorCode/.url
+      _webviewController.onLoadError.listen((WebErrorStatus error) {
+        _log("❌ WebView LOAD ERROR: $error (${error.name})");
+        if (mounted) {
+          setState(() => _webViewError =
+              "Halaman gagal dimuat.\n\nWebErrorStatus: ${error.name}");
+        }
+      });
+
+      _webviewController.containsFullScreenElementChanged.listen((flag) {
+        _log("📡 Fullscreen changed: $flag");
+      });
+
+      _webviewController.securityStateChanged.listen((state) {
+        _log("📡 Security state changed: $state");
+      });
+
+      _log("Step 4/5: ✅ Event listeners registered");
+    } catch (e) {
+      _log("Step 4/5: ⚠️ Some event listeners failed: $e");
+    }
+
+    // Step 5: Load URL
+    try {
+      _log("Step 5/5: Loading URL: $url");
       await _webviewController.loadUrl(url);
+      _log("Step 5/5: ✅ loadUrl() called successfully");
+
       if (mounted) {
         setState(() => _isWebViewReady = true);
+        _log("WebView marked as READY");
       }
-    } catch (e) {
-      print("❌ Error WebView: $e");
+    } catch (e, stack) {
+      _log("Step 5/5: ❌ loadUrl FAILED: $e");
+      _log("Stack: $stack");
+      if (mounted) {
+        setState(() => _webViewError =
+            "Gagal memuat URL pembayaran.\n\nURL: $url\nError: $e");
+      }
     }
+
+    _log("--- WebView Init END ---");
   }
 
   /// Inject JavaScript to auto-select QRIS payment on DOKU checkout page
@@ -160,7 +320,6 @@ class _PaymentPageState extends State<PaymentPage> {
         var qrisClicked = false;
 
         function simulateClick(el) {
-          // Dispatch full mouse event sequence for frameworks
           ['mousedown', 'mouseup', 'click'].forEach(function(evtType) {
             el.dispatchEvent(new MouseEvent(evtType, {
               bubbles: true, cancelable: true, view: window
@@ -171,7 +330,6 @@ class _PaymentPageState extends State<PaymentPage> {
         function trySelectQris(attempt) {
           if (attempt > 30 || qrisClicked) return;
 
-          // XPath: find any element whose text contains "QRIS" (case-insensitive)
           var xpathResult = document.evaluate(
             "//*[contains(translate(text(),'qris','QRIS'),'QRIS')]",
             document, null,
@@ -180,7 +338,6 @@ class _PaymentPageState extends State<PaymentPage> {
 
           for (var i = 0; i < xpathResult.snapshotLength; i++) {
             var node = xpathResult.snapshotItem(i);
-            // Walk up from the text node to find clickable parent
             var target = node;
             for (var depth = 0; depth < 8; depth++) {
               if (!target) break;
@@ -188,7 +345,6 @@ class _PaymentPageState extends State<PaymentPage> {
               var role = (target.getAttribute && target.getAttribute('role')) || '';
               var cursor = window.getComputedStyle(target).cursor;
 
-              // Check if this element is clickable
               if (tag === 'BUTTON' || tag === 'A' || tag === 'LI' ||
                   role === 'button' || role === 'tab' || role === 'option' ||
                   cursor === 'pointer' ||
@@ -204,7 +360,6 @@ class _PaymentPageState extends State<PaymentPage> {
             }
           }
 
-          // Fallback: querySelector approach for DOKU-specific selectors
           var fallbackSelectors = [
             '[data-channel*="qris" i]',
             '[data-channel*="QRIS"]',
@@ -230,12 +385,10 @@ class _PaymentPageState extends State<PaymentPage> {
             } catch(e) {}
           }
 
-          // Last resort: click any element with QRIS in its text
           if (!qrisClicked) {
             var all = document.querySelectorAll('*');
             for (var k = 0; k < all.length; k++) {
               var el = all[k];
-              // Only check direct text content (not children)
               var directText = '';
               for (var c = 0; c < el.childNodes.length; c++) {
                 if (el.childNodes[c].nodeType === 3) {
@@ -243,7 +396,6 @@ class _PaymentPageState extends State<PaymentPage> {
                 }
               }
               if (directText.trim().toUpperCase().indexOf('QRIS') !== -1) {
-                // Walk up to find clickable parent
                 var clickTarget = el;
                 while (clickTarget && clickTarget !== document.body) {
                   var cs = window.getComputedStyle(clickTarget).cursor;
@@ -256,7 +408,6 @@ class _PaymentPageState extends State<PaymentPage> {
                   }
                   clickTarget = clickTarget.parentElement;
                 }
-                // If no pointer parent found, just click the element itself
                 simulateClick(el);
                 qrisClicked = true;
                 console.log('[AutoQRIS] Direct clicked:', el.tagName);
@@ -266,7 +417,6 @@ class _PaymentPageState extends State<PaymentPage> {
             }
           }
 
-          // Retry
           setTimeout(function() { trySelectQris(attempt + 1); }, 500);
         }
 
@@ -292,7 +442,6 @@ class _PaymentPageState extends State<PaymentPage> {
           }
         }
 
-        // Also observe DOM mutations for dynamically loaded content
         var observer = new MutationObserver(function(mutations) {
           if (!qrisClicked) {
             trySelectQris(0);
@@ -304,15 +453,15 @@ class _PaymentPageState extends State<PaymentPage> {
           childList: true, subtree: true
         });
 
-        // Start initial attempt after delay
         setTimeout(function() { trySelectQris(0); }, 1500);
       })();
     ''';
 
     try {
       await _webviewController.executeScript(jsCode);
+      _log("✅ QRIS auto-select JS injected");
     } catch (e) {
-      print("⚠️ JS injection error: \$e");
+      _log("⚠️ JS injection error: $e");
     }
   }
 
@@ -370,6 +519,7 @@ class _PaymentPageState extends State<PaymentPage> {
   // POLLING & SUCCESS
   // ================================================================
   void _startPolling(String uuid) {
+    _log("Starting payment polling for $uuid");
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted) {
         timer.cancel();
@@ -377,6 +527,7 @@ class _PaymentPageState extends State<PaymentPage> {
       }
       final apiService = Provider.of<ApiService>(context, listen: false);
       final paid = await apiService.checkPaymentStatus(uuid);
+      _log("Poll check: paid=$paid");
       if (paid) {
         timer.cancel();
         if (mounted) _handlePaymentSuccess();
@@ -387,6 +538,7 @@ class _PaymentPageState extends State<PaymentPage> {
   void _handlePaymentSuccess() {
     _pollingTimer?.cancel();
     if (_isPaid) return;
+    _log("🎉 Payment success!");
     if (mounted) {
       setState(() => _isPaid = true);
       Provider.of<PhotoProvider>(context, listen: false).reset();
@@ -394,7 +546,8 @@ class _PaymentPageState extends State<PaymentPage> {
         if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => StaticFrameTemplatePage()),
+            MaterialPageRoute(
+                builder: (_) => const StaticFrameTemplatePage()),
           );
         }
       });
@@ -402,13 +555,14 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   void _resetToMenu(String message) {
+    _log("Reset to menu: $message");
     if (mounted) {
       setState(() {
         _isLoading = false;
         _isSelectionMode = true;
         _isVoucherMode = false;
-        _paymentUrl = null;
         _isWebViewReady = false;
+        _webViewError = "";
       });
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
@@ -433,6 +587,117 @@ class _PaymentPageState extends State<PaymentPage> {
                     ? _buildVoucherInput()
                     : _buildPaymentWebView(),
           ),
+
+          // ── DEBUG PANEL TOGGLE (pojok kanan bawah) ──
+          Positioned(
+            bottom: 10,
+            right: 10,
+            child: GestureDetector(
+              onTap: () => setState(() => _showDebugPanel = !_showDebugPanel),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _showDebugPanel
+                      ? "HIDE DEBUG"
+                      : "SHOW DEBUG (${_debugLogs.length})",
+                  style: const TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 11,
+                      fontFamily: 'monospace'),
+                ),
+              ),
+            ),
+          ),
+
+          // ── DEBUG PANEL ──
+          if (_showDebugPanel)
+            Positioned(
+              bottom: 45,
+              right: 10,
+              child: Container(
+                width: 550,
+                height: 350,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.92),
+                  border: Border.all(color: Colors.greenAccent, width: 1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      color: Colors.greenAccent.withValues(alpha: 0.15),
+                      child: Row(
+                        children: [
+                          const Text("🔍 DEBUG CONSOLE",
+                              style: TextStyle(
+                                  color: Colors.greenAccent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'monospace')),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: () => setState(() => _debugLogs.clear()),
+                            child: const Text("CLEAR",
+                                style: TextStyle(
+                                    color: Colors.orangeAccent,
+                                    fontSize: 11,
+                                    fontFamily: 'monospace')),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () =>
+                                setState(() => _showDebugPanel = false),
+                            child: const Text("✕",
+                                style: TextStyle(
+                                    color: Colors.redAccent, fontSize: 14)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Logs
+                    Expanded(
+                      child: ListView.builder(
+                        reverse: true,
+                        padding: const EdgeInsets.all(8),
+                        itemCount: _debugLogs.length,
+                        itemBuilder: (_, i) {
+                          final log = _debugLogs[_debugLogs.length - 1 - i];
+                          Color logColor = Colors.greenAccent;
+                          if (log.contains('❌')) {
+                            logColor = Colors.redAccent;
+                          } else if (log.contains('⚠️')) {
+                            logColor = Colors.orangeAccent;
+                          } else if (log.contains('✅')) {
+                            logColor = Colors.lightGreenAccent;
+                          } else if (log.contains('📡')) {
+                            logColor = Colors.cyanAccent;
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            child: Text(log,
+                                style: TextStyle(
+                                    color: logColor,
+                                    fontSize: 10,
+                                    fontFamily: 'monospace',
+                                    height: 1.4)),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // Bypass button
           Positioned(
             bottom: 0,
@@ -482,7 +747,7 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ── PAYMENT WEBVIEW (menggantikan QR View) ──
+  // ── PAYMENT WEBVIEW ──
   Widget _buildPaymentWebView() {
     return Container(
       width: 500,
@@ -523,13 +788,29 @@ class _PaymentPageState extends State<PaymentPage> {
                       ],
                     ),
                   )
-                : _isPaid
-                    ? _buildSuccessView()
-                    : _isWebViewReady
-                        ? Webview(_webviewController)
-                        : const Center(
-                            child: Text("Memuat WebView..."),
-                          ),
+                : _webViewError.isNotEmpty
+                    ? _buildWebViewErrorView()
+                    : _isPaid
+                        ? _buildSuccessView()
+                        : _isWebViewReady
+                            ? Webview(_webviewController)
+                            : const Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircularProgressIndicator(),
+                                    SizedBox(height: 12),
+                                    Text("Memuat WebView..."),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      "Jika stuck, klik SHOW DEBUG",
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.black45),
+                                    ),
+                                  ],
+                                ),
+                              ),
           ),
 
           // Cancel button
@@ -553,6 +834,52 @@ class _PaymentPageState extends State<PaymentPage> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  // ── WEBVIEW ERROR VIEW ──
+  Widget _buildWebViewErrorView() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 56),
+          const SizedBox(height: 12),
+          const Text("WebView Error",
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red)),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              border: Border.all(color: Colors.red.shade200),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              _webViewError,
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+              textAlign: TextAlign.left,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.refresh),
+            label: const Text("Coba Lagi"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0000AA),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              setState(() => _webViewError = "");
+              _onSelectQRIS();
+            },
+          ),
         ],
       ),
     );
@@ -596,7 +923,9 @@ class _PaymentPageState extends State<PaymentPage> {
               textCapitalization: TextCapitalization.characters,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 4),
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 4),
               decoration: InputDecoration(
                 hintText: "XXXXX",
                 hintStyle: const TextStyle(color: Colors.black38),
@@ -619,7 +948,8 @@ class _PaymentPageState extends State<PaymentPage> {
                   shape: const BeveledRectangleBorder(),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                onPressed: _isValidatingVoucher ? null : _validateAndUseVoucher,
+                onPressed:
+                    _isValidatingVoucher ? null : _validateAndUseVoucher,
                 child: _isValidatingVoucher
                     ? const SizedBox(
                         width: 20,
@@ -778,7 +1108,7 @@ class OutlinedText extends StatelessWidget {
                       fontWeight: fontWeight,
                       letterSpacing: letterSpacing,
                       height: 1.2,
-                      color: Colors.black.withOpacity(0.6)))),
+                      color: Colors.black.withValues(alpha: 0.6)))),
         Text(text,
             textAlign: TextAlign.center,
             style: TextStyle(

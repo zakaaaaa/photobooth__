@@ -63,7 +63,27 @@ class ApiService {
       );
 
       print("🚀 Start Response: ${response.statusCode} - ${response.body}");
-      return response.statusCode == 200 || response.statusCode == 201;
+
+      // ── DEBUG: Extract session_id from response jika ada ──
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        try {
+          final data = json.decode(response.body);
+          print("🔍 Session response keys: ${data.keys.toList()}");
+          if (data['session_id'] != null) {
+            print("🔍 Backend session_id: ${data['session_id']}");
+          }
+          if (data['uuid'] != null) {
+            print("🔍 Backend uuid: ${data['uuid']}");
+          }
+          if (data['transaction_code'] != null) {
+            print("🔍 Backend transaction_code: ${data['transaction_code']}");
+          }
+          // Print all data for debugging
+          print("🔍 Full session response data: $data");
+        } catch (_) {}
+        return true;
+      }
+      return false;
     } catch (e) {
       print("Error Start Session: $e");
       return false;
@@ -76,22 +96,74 @@ class ApiService {
   Future<String?> generatePaymentLink(String sessionUuid) async {
     try {
       final uri = Uri.parse("$baseUrl/payment/generate");
+
+      print("──────────────────────────────────────────");
+      print("💳 generatePaymentLink DEBUG");
+      print("💳 URL: $uri");
+      print("💳 session_uuid being sent: $sessionUuid");
+      print("──────────────────────────────────────────");
+
+      final requestBody = jsonEncode({
+        'session_uuid': sessionUuid,
+      });
+      print("💳 Request body: $requestBody");
+
       final response = await http.post(
         uri,
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        body: jsonEncode({
-          'session_uuid': sessionUuid,
-        }),
+        body: requestBody,
       );
-      if (response.statusCode == 200) {
+
+      print("💳 Response status: ${response.statusCode}");
+      print("💳 Response headers: ${response.headers}");
+      print("💳 Response body: ${response.body}");
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
-        return data['payment_url'];
+        print("💳 Decoded response keys: ${data.keys.toList()}");
+        print("💳 Full decoded data: $data");
+
+        // Coba beberapa kemungkinan field name
+        final paymentUrl = data['payment_url']
+            ?? data['paymentUrl']
+            ?? data['url']
+            ?? data['checkout_url']
+            ?? data['redirect_url']
+            ?? data['link'];
+
+        if (paymentUrl != null) {
+          print("💳 ✅ Payment URL found: $paymentUrl");
+          return paymentUrl;
+        } else {
+          print("💳 ❌ No payment URL field found in response!");
+          print("💳 Available keys: ${data.keys.toList()}");
+          print("💳 Tip: Check backend response format");
+          return null;
+        }
+      } else {
+        print("💳 ❌ Non-200 status code: ${response.statusCode}");
+        print("💳 Error body: ${response.body}");
+
+        // Try to decode error response
+        try {
+          final errorData = json.decode(response.body);
+          print("💳 Error message: ${errorData['message'] ?? errorData['error'] ?? 'unknown'}");
+        } catch (_) {
+          print("💳 Could not decode error response");
+        }
       }
+    } on SocketException catch (e) {
+      print("💳 ❌ SocketException (no internet/DNS fail): $e");
+    } on http.ClientException catch (e) {
+      print("💳 ❌ ClientException: $e");
+    } on FormatException catch (e) {
+      print("💳 ❌ FormatException (invalid JSON response): $e");
     } catch (e) {
-      print("❌ Error Payment: $e");
+      print("💳 ❌ Unexpected error: $e");
+      print("💳 Error type: ${e.runtimeType}");
     }
     return null;
   }
