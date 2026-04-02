@@ -35,7 +35,7 @@ class _PaymentPageState extends State<PaymentPage> {
   String _webViewError = "";
   bool _showDebugPanel = false;
 
-  final double _sessionPrice = 500;
+  final double _sessionPrice = 30000;
 
   @override
   void initState() {
