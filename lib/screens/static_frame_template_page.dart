@@ -135,7 +135,7 @@ class _StaticFrameTemplatePageState extends State<StaticFrameTemplatePage> {
           final List<dynamic> framesJson = data['frames'] ?? [];
 
           // ✅ Set durasi dari API DULU, baru startSession
-          final int durationMin = (data['session_duration_minutes'] as num? ?? 30).toInt();
+          final int durationMin = (data['session_duration_minutes'] as num? ?? 5).toInt();
           if (mounted) {
             final provider = Provider.of<PhotoProvider>(context, listen: false);
             provider.setSessionDuration(durationMin);

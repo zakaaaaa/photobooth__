@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -15,22 +16,26 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ── Fullscreen setup ──
-  await windowManager.ensureInitialized();
+  if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+    try {
+      await windowManager.ensureInitialized();
 
-  WindowOptions windowOptions = const WindowOptions(
-    fullScreen: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    titleBarStyle: TitleBarStyle.hidden,
-  );
+      WindowOptions windowOptions = const WindowOptions(
+        fullScreen: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        titleBarStyle: TitleBarStyle.hidden,
+      );
 
-  await windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.setFullScreen(true);
-    await windowManager.setAlwaysOnTop(true);
-    await windowManager.setSkipTaskbar(true);
-    await windowManager.show();
-    await windowManager.focus();
-  });
+      // Async: Jangan block runApp
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+        await windowManager.focus();
+      });
+    } catch (e) {
+      debugPrint('WindowManager Init Error: $e');
+    }
+  }
 
   runApp(const MyApp());
 }

@@ -8,29 +8,42 @@ class ImageFilterUtil {
     PhotoFilter filter,
   ) async {
     // 1. Decode dengan mempertahankan resolusi asli
-    final image = img.decodeImage(imageData);
+    var image = img.decodeImage(imageData);
     if (image == null) return imageData;
+
+    // 1.2 Limit resolusi agar tidak terlalu berat (DSLR 24MP → ~4MP)
+    // 2500px sudah Ultra-HD dan sangat cukup untuk cetak profesional
+    if (image.width > 2500 || image.height > 2500) {
+      if (image.width > image.height) {
+        image = img.copyResize(image, width: 2500);
+      } else {
+        image = img.copyResize(image, height: 2500);
+      }
+    }
+
+    // 1.5 Auto-mirror (horizontal flip) agar hasilnya seperti selfie
+    final selfieImage = img.flipHorizontal(image);
 
     img.Image filteredImage;
 
     switch (filter) {
       case PhotoFilter.vintage:
-        filteredImage = _applyVintageFilter(image);
+        filteredImage = _applyVintageFilter(selfieImage);
         break;
       case PhotoFilter.grayscale:
-        filteredImage = img.grayscale(image);
+        filteredImage = img.grayscale(selfieImage);
         break;
       case PhotoFilter.smooth:
         // PERBAIKAN: Gunakan sharpen tipis setelah blur agar tidak terlihat pecah/buram
-        filteredImage = img.gaussianBlur(image, radius: 1); // Radius dikurangi agar tidak terlalu blur
+        filteredImage = img.gaussianBlur(selfieImage, radius: 1); // Radius dikurangi agar tidak terlalu blur
         break;
       case PhotoFilter.brightness:
         // Menaikkan brightness tanpa merusak pixel
-        filteredImage = img.adjustColor(image, brightness: 1.15);
+        filteredImage = img.adjustColor(selfieImage, brightness: 1.15);
         break;
       case PhotoFilter.none:
       default:
-        filteredImage = image;
+        filteredImage = selfieImage;
     }
 
     // --- PERBAIKAN VITAL DISINI ---

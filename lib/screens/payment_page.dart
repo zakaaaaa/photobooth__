@@ -33,7 +33,6 @@ class _PaymentPageState extends State<PaymentPage> {
   // ── DEBUG STATE ──
   final List<String> _debugLogs = [];
   String _webViewError = "";
-  bool _showDebugPanel = false;
 
   final double _sessionPrice = 30000;
 
@@ -588,115 +587,6 @@ class _PaymentPageState extends State<PaymentPage> {
                     : _buildPaymentWebView(),
           ),
 
-          // ── DEBUG PANEL TOGGLE (pojok kanan bawah) ──
-          Positioned(
-            bottom: 10,
-            right: 10,
-            child: GestureDetector(
-              onTap: () => setState(() => _showDebugPanel = !_showDebugPanel),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black87,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  _showDebugPanel
-                      ? "HIDE DEBUG"
-                      : "SHOW DEBUG (${_debugLogs.length})",
-                  style: const TextStyle(
-                      color: Colors.greenAccent,
-                      fontSize: 11,
-                      fontFamily: 'monospace'),
-                ),
-              ),
-            ),
-          ),
-
-          // ── DEBUG PANEL ──
-          if (_showDebugPanel)
-            Positioned(
-              bottom: 45,
-              right: 10,
-              child: Container(
-                width: 550,
-                height: 350,
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.92),
-                  border: Border.all(color: Colors.greenAccent, width: 1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      color: Colors.greenAccent.withValues(alpha: 0.15),
-                      child: Row(
-                        children: [
-                          const Text("🔍 DEBUG CONSOLE",
-                              style: TextStyle(
-                                  color: Colors.greenAccent,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'monospace')),
-                          const Spacer(),
-                          GestureDetector(
-                            onTap: () => setState(() => _debugLogs.clear()),
-                            child: const Text("CLEAR",
-                                style: TextStyle(
-                                    color: Colors.orangeAccent,
-                                    fontSize: 11,
-                                    fontFamily: 'monospace')),
-                          ),
-                          const SizedBox(width: 12),
-                          GestureDetector(
-                            onTap: () =>
-                                setState(() => _showDebugPanel = false),
-                            child: const Text("✕",
-                                style: TextStyle(
-                                    color: Colors.redAccent, fontSize: 14)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Logs
-                    Expanded(
-                      child: ListView.builder(
-                        reverse: true,
-                        padding: const EdgeInsets.all(8),
-                        itemCount: _debugLogs.length,
-                        itemBuilder: (_, i) {
-                          final log = _debugLogs[_debugLogs.length - 1 - i];
-                          Color logColor = Colors.greenAccent;
-                          if (log.contains('❌')) {
-                            logColor = Colors.redAccent;
-                          } else if (log.contains('⚠️')) {
-                            logColor = Colors.orangeAccent;
-                          } else if (log.contains('✅')) {
-                            logColor = Colors.lightGreenAccent;
-                          } else if (log.contains('📡')) {
-                            logColor = Colors.cyanAccent;
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Text(log,
-                                style: TextStyle(
-                                    color: logColor,
-                                    fontSize: 10,
-                                    fontFamily: 'monospace',
-                                    height: 1.4)),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
 
           // Bypass button
           Positioned(

@@ -15,6 +15,7 @@ import 'customization_page.dart';
 import 'preview_print_page.dart';
 import '../utils/image_filter.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import '../services/digicam_camera_service.dart';
 
 // ================================================================
 // TOP-LEVEL ISOLATE FUNCTION — encode PNG di background thread
@@ -48,6 +49,9 @@ class _CameraPageState extends State<CameraPage> {
   int  _countdown       = 0;
   bool _showBlink       = false;
   int  _retakeCount     = 0;
+  bool _isDSLRProcessing = false;
+
+  final DigiCamCameraService _dslrService = DigiCamCameraService();
 
   bool _isRendering = false;
   bool _renderDone  = false;
@@ -101,6 +105,11 @@ class _CameraPageState extends State<CameraPage> {
       _lockedFilter = provider.selectedFilter;
     });
     _initCamera();
+    _initDSLR();
+  }
+
+  Future<void> _initDSLR() async {
+    await _dslrService.initialize();
   }
 
   @override
@@ -127,7 +136,7 @@ class _CameraPageState extends State<CameraPage> {
       
       _cameraController = CameraController(
         camera,
-        ResolutionPreset.high,
+        ResolutionPreset.max,
         enableAudio: false,
       );
       
@@ -246,15 +255,23 @@ class _CameraPageState extends State<CameraPage> {
   Future<void> _takePictureAndSave() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) return;
     try {
+      Uint8List? raw;
+      
+      // 1. Ambil dari Webcam sebagai Utama (Prioritas Kecepatan & Kualitas 1080p)
+      debugPrint("📸 Menggunakan Webcam untuk capture (High Quality Priority)...");
       final XFile result = await _cameraController!.takePicture();
-      final Uint8List raw = await result.readAsBytes();
+      raw = await result.readAsBytes();
 
+      // 2. Info: DSLR tetap bisa di-trigger jika dibutuhkan di masa depan, 
+      // tapi untuk sekarang kita fokus ke kecepatan webcam 1080p.
+      
       if (!mounted) return;
+      final Uint8List imageBytes = raw;
 
       final provider = Provider.of<PhotoProvider>(context, listen: false);
 
       // ── FIX: Gunakan _lockedFilter (bukan provider.selectedFilter yang bisa berubah) ──
-      final Uint8List filtered = await ImageFilterUtil.applyFilter(raw, _lockedFilter);
+      final Uint8List filtered = await ImageFilterUtil.applyFilter(imageBytes, _lockedFilter);
 
       final int photoIndex = provider.photos.length;
       await _savePhotoLocally(filtered, photoIndex, provider.sessionUuid);
@@ -326,7 +343,9 @@ class _CameraPageState extends State<CameraPage> {
     try {
       debugPrint("🖼️ Rendering frame result...");
 
-      const double scale = 3.0;
+      // Skala 3.5 memadai untuk cetak 4x6 inch di 300 DPI (standard profesional)
+      // Ini jauh lebih cepat dibanding skala 4.5
+      const double scale = 3.5;
       final double w = provider.selectedFrameWidth  * scale;
       final double h = provider.selectedFrameHeight * scale;
 
@@ -588,7 +607,10 @@ class _CameraPageState extends State<CameraPage> {
                       child: SizedBox(
                         width: _cameraController!.value.previewSize?.width ?? 1,
                         height: _cameraController!.value.previewSize?.height ?? 1,
-                        child: CameraPreview(_cameraController!),
+                        child: Transform.scale(
+                          scaleX: -1.0,
+                          child: CameraPreview(_cameraController!),
+                        ),
                       ),
                     ),
                   )
@@ -650,6 +672,38 @@ class _CameraPageState extends State<CameraPage> {
 
           // ── 4. BLINK FLASH ──
           if (_showBlink) Container(color: Colors.white),
+
+          // ── 4.5 DSLR PROCESSING OVERLAY ──
+          if (_isDSLRProcessing)
+            Container(
+              color: Colors.black.withOpacity(0.7),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 20),
+                    Text(
+                      "Processing High Quality Photo...",
+                      style: TextStyle(
+                        fontFamily: 'Ambitsek',
+                        color: Colors.white,
+                        fontSize: 24,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      "Please wait, transferring data from camera",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // ── 5. SIDEBAR ──
           Positioned(

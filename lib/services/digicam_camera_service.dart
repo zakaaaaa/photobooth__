@@ -48,7 +48,7 @@ class DigiCamCameraService {
     }
   }
 
-  // Detect Camera - Simplified (just check if DigiCamControl exe exists)
+  // Detect Camera - Check if any camera is connected
   Future<bool> detectCamera() async {
     if (!_isInitialized || _digicamPath == null) {
       print('❌ Not initialized');
@@ -56,9 +56,18 @@ class DigiCamCameraService {
     }
 
     try {
-      // We just check if the exe exists - actual camera test happens on capture
-      print('✅ DigiCamControl ready at: $_digicamPath');
-      print('⚠️ Camera will be tested on first capture');
+      // Check for connected cameras using /devicelist command
+      final result = await _shell.run('"$_digicamPath" /devicelist');
+      final output = result.first.stdout.toString();
+      
+      // digiCamControl device list output typically contains "Connected cameras:" 
+      // followed by camera names or "None"
+      if (output.toLowerCase().contains('none') || output.trim().isEmpty) {
+        print('⚠️ No DSLR camera detected via digiCamControl');
+        return false;
+      }
+      
+      print('✅ DSLR Camera detected: $output');
       return true;
     } catch (e) {
       print('❌ Error detecting camera: $e');

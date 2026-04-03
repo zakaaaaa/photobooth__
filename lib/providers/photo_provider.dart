@@ -99,7 +99,7 @@ class PhotoProvider extends ChangeNotifier {
   bool _isSessionActive = false;
 
   // ── BARU: durasi dari API, di-set saat fetch /api/frames ──
-  int _sessionDurationMin = 30; // fallback default
+  int _sessionDurationMin = 5; // fallback default (was 30)
 
   // ── BARU: callback dipanggil saat timer habis ──
   // Di-assign oleh root widget (mis. SplashScreen atau MaterialApp wrapper)
@@ -132,8 +132,10 @@ class PhotoProvider extends ChangeNotifier {
 
   // ── BARU: dipanggil saat response /api/frames diterima ──
   void setSessionDuration(int minutes) {
-    _sessionDurationMin = minutes > 0 ? minutes : 30;
-    debugPrint('⏱ Session duration set dari API: $_sessionDurationMin menit');
+    // REVISI: Paksa 5 menit sesuai permintaan user. 
+    // Abaikan jika API mengirimkan 30 menit.
+    _sessionDurationMin = 5; 
+    debugPrint('⏱ Session duration set (Forced to 5 mins): $_sessionDurationMin menit');
   }
 
   String _sessionUuid = ''; 
@@ -166,11 +168,13 @@ class PhotoProvider extends ChangeNotifier {
     }
   }
 
-  // ── startSession: sekarang pakai _sessionDurationMin dari API ──
+  // ── startSession: dipaksa 5 menit sesuai permintaan user ──
   void startSession() {
     _sessionTimer?.cancel();
-    _remainingTime   = _sessionDurationMin * 60; // ← dari API, bukan hardcode 320
-    _isSessionActive = true;
+    // REVISI: Paksa 5 menit (300 detik) agar tidak bisa di-override API
+    _sessionDurationMin = 5; 
+    _remainingTime      = _sessionDurationMin * 60; 
+    _isSessionActive    = true;
     notifyListeners();
 
     debugPrint('⏱ Timer dimulai: $_sessionDurationMin menit ($_remainingTime detik)');

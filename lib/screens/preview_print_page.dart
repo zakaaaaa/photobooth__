@@ -57,17 +57,22 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
   final double cardWidth = 242.0;
   final double cardHeight = 275.0;
   final double cardSpacing = 20.0;
+  bool _hasPrinted = false;
 
   static const String _frontendUrl = 'https://app.amandya.tech';
   static const String _backendUrl = 'https://api.amandya.tech';
 
   Future<void> _printPhoto(BuildContext context) async {
+    if (_hasPrinted) return;
+    
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     if (provider.finalImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Please wait, preparing photo...")));
       return;
     }
+
+    setState(() => _hasPrinted = true);
 
     showDialog(
       context: context,
@@ -153,6 +158,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
       }
     }
   }
+
 
   Future<void> _downloadPhotoToLocal(BuildContext context) async {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
@@ -264,10 +270,10 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                           //     onTap: () => _downloadPhotoToLocal(context)),
                           const SizedBox(width: 20),
                           RetroButton(
-                              icon: Icons.print,
-                              label: "PRINT",
-                              color: Colors.green,
-                              onTap: () => _printPhoto(context)),
+                              icon: _hasPrinted ? Icons.check_circle : Icons.print,
+                              label: _hasPrinted ? "PRINTED" : "PRINT",
+                              color: _hasPrinted ? Colors.grey : Colors.green,
+                              onTap: _hasPrinted ? () {} : () => _printPhoto(context)),
                         ],
                       ),
                     ],
