@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../services/license_service.dart';
+import '../services/config_service.dart';
 import 'payment_page.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -24,7 +25,7 @@ class _SplashScreenState extends State<SplashScreen> {
   bool _hwidCopied = false;
   bool _isHoveringClose = false;
 
-  static const String _backendUrl = 'http://168.231.125.203:8181';
+  static final String _backendUrl = ConfigService().baseUrl;
 
   @override
   void initState() {
@@ -35,11 +36,14 @@ class _SplashScreenState extends State<SplashScreen> {
 
   /// Kirim request dummy ke backend supaya koneksi TCP & Supabase pool
   /// sudah hangat saat user membuka frame selection.
-  void _preWarmConnection() {
-    http
-        .get(Uri.parse('$_backendUrl/api/frames?hwid=warmup'))
-        .timeout(const Duration(seconds: 10))
-        .catchError((_) {});
+  void _preWarmConnection() async {
+    try {
+      await http
+          .get(Uri.parse('$_backendUrl/api/frames?hwid=warmup'))
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      // Sembunyikan error pre-warm karena hanya untuk "pemanasan" koneksi
+    }
   }
 
   Future<void> _checkAccess() async {
@@ -263,9 +267,9 @@ class _SplashScreenState extends State<SplashScreen> {
                     // Server
                     const Text("SERVER:", style: TextStyle(color: Colors.white54, fontSize: 10, letterSpacing: 1)),
                     const SizedBox(height: 2),
-                    const Text(
-                      "http://168.231.125.203:8181/api",
-                      style: TextStyle(color: Colors.lightBlueAccent, fontSize: 10, fontFamily: 'monospace'),
+                    Text(
+                      _backendUrl,
+                      style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 10, fontFamily: 'monospace'),
                     ),
 
                     const SizedBox(height: 8),

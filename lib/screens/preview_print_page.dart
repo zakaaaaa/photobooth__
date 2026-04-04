@@ -20,6 +20,7 @@ import 'package:http_parser/http_parser.dart' as http_parser;
 
 import 'package:photobooth_app/providers/photo_provider.dart';
 import 'package:photobooth_app/screens/splash_screen.dart';
+import 'package:photobooth_app/services/config_service.dart';
 
 // ============================================================
 // TOP-LEVEL ISOLATE FUNCTION — encode PNG di background thread
@@ -60,7 +61,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
   bool _hasPrinted = false;
 
   static const String _frontendUrl = 'https://app.amandya.tech';
-  static const String _backendUrl = 'https://api.amandya.tech';
+  static final String _backendUrl = ConfigService().baseUrl;
 
   Future<void> _printPhoto(BuildContext context) async {
     if (_hasPrinted) return;
@@ -521,7 +522,7 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
   bool _isUploaded = false;
   String _uploadStatus = '';
 
-  static const String _backendUrl = 'https://api.amandya.tech';
+  static final String _backendUrl = ConfigService().baseUrl;
 
   @override
   void initState() {

@@ -5,7 +5,7 @@ import 'config_service.dart';
 
 class ApiService {
   // ✅ Dinamis: Local (dev) atau VPS (prod)
-  final String baseUrl = "${ConfigService().baseUrl}/api";
+  String get baseUrl => "${ConfigService().baseUrl}/api";
 
   // =================================================================
   // 1. LICENSE CHECK

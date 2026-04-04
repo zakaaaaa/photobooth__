@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:http_parser/http_parser.dart';
+import '../services/config_service.dart';
 import '../providers/photo_provider.dart';
 import 'customization_page.dart';
 import 'preview_print_page.dart';
@@ -59,7 +60,7 @@ class _CameraPageState extends State<CameraPage> {
   // ── FIX FILTER: simpan filter yang dipilih sebelum sesi dimulai ──
   PhotoFilter _lockedFilter = PhotoFilter.none;
 
-  static const String _backendUrl = 'http://168.231.125.203:8181/api';
+  static final String _backendUrl = ConfigService().baseUrl;
 
   // ── Filter matrices ──
   static const ColorFilter _sepiaMatrix = ColorFilter.matrix(<double>[

@@ -47,7 +47,9 @@ class _PaymentPageState extends State<PaymentPage> {
   void dispose() {
     _pollingTimer?.cancel();
     _voucherController.dispose();
-    _webviewController.dispose();
+    if (_isWebViewReady) {
+      _webviewController.dispose();
+    }
     super.dispose();
   }
 
