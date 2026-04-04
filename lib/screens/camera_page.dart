@@ -344,9 +344,8 @@ class _CameraPageState extends State<CameraPage> {
     try {
       debugPrint("🖼️ Rendering frame result...");
 
-      // Skala 3.5 memadai untuk cetak 4x6 inch di 300 DPI (standard profesional)
-      // Ini jauh lebih cepat dibanding skala 4.5
-      const double scale = 3.5;
+      // Skala 2.5 memadai untuk cetak 4x6 inch di ~500 DPI (Sangat Tajam & Cepat)
+      const double scale = 2.5; 
       final double w = provider.selectedFrameWidth  * scale;
       final double h = provider.selectedFrameHeight * scale;
 

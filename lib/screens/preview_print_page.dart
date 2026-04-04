@@ -3,11 +3,9 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart'
-    show compute, consolidateHttpClientResponseBytes;
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -537,7 +535,6 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
 
     debugPrint('⏱ [0] _waitForFrameAndCapture — frameUrl: $frameUrl');
 
-    // Pre-warm: pastikan network image sudah di-cache sebelum toImage()
     if (frameUrl != null && frameUrl.startsWith('http')) {
       debugPrint('⏱ [0a] Pre-loading frame image dari network...');
       try {
@@ -549,7 +546,6 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
     }
 
     if (mounted) {
-      // Delay singkat agar widget rebuild dengan frame image yang sudah di-cache
       await Future.delayed(const Duration(milliseconds: 200));
       _captureAndUpload();
     }
@@ -557,90 +553,83 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
 
   Future<void> _captureAndUpload() async {
     if (_isUploaded) return;
+    final provider = Provider.of<PhotoProvider>(context, listen: false);
+
+    if (provider.finalImageBytes != null) {
+      debugPrint('🚀 [Optimized] Menggunakan hasil render asli dari CameraPage...');
+      await _uploadFinalResult(provider.finalImageBytes!, provider.sessionUuid);
+      return;
+    }
+
     setState(() {
       _isUploading = true;
       _uploadStatus = 'Merender foto...';
     });
 
     try {
-      final sw = Stopwatch()..start();
-      debugPrint('⏱ [1] Mulai capture...');
-
-      final boundary = _globalKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
+      final boundary = _globalKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      
       if (boundary == null) {
-        debugPrint('❌ [1] boundary null');
         setState(() {
           _isUploading = false;
           _uploadStatus = 'Gagal capture widget.';
         });
         return;
       }
-      debugPrint(
-          '⏱ [2] boundary OK — size: ${boundary.size} (${sw.elapsedMilliseconds}ms)');
 
-      // ── boundary.size sekarang ~ukuran layar (misal 500x707px) ──
-      // bukan 2480x3508 seperti sebelumnya
-      final prov = Provider.of<PhotoProvider>(context, listen: false);
-      final frameW = prov.selectedFrameWidth;
+      final frameW = provider.selectedFrameWidth;
       final renderW = boundary.size.width;
-      // Ratio: frameW/renderW misal 2480/500 = 4.96 → clamp ke 4.0
-      // Output: 500*4 = 2000px wide — tajam untuk print tanpa terlalu berat
       final ratio = (frameW / renderW).clamp(1.0, 4.0);
-      debugPrint('⏱ [3] frameW=$frameW renderW=$renderW ratio=$ratio');
 
-      // Step A — toImage: ukuran output = renderSize * ratio
       final uiImage = await boundary.toImage(pixelRatio: ratio);
-      debugPrint(
-          '⏱ [4] toImage done — ${uiImage.width}x${uiImage.height}px (${sw.elapsedMilliseconds}ms)');
-
-      // Step B — rawRgba: CEPAT, tidak ada encoding
-      final byteData =
-          await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) throw Exception('toByteData null');
       final rawBytes = byteData.buffer.asUint8List();
-      debugPrint(
-          '⏱ [5] toByteData rawRgba done — ${rawBytes.length} bytes (${sw.elapsedMilliseconds}ms)');
 
-      // Step C — encode PNG di background isolate, UI tetap responsive
       if (mounted) setState(() => _uploadStatus = 'Encoding PNG...');
       final pngBytes = await compute(_encodePngInIsolate, {
         'width': uiImage.width,
         'height': uiImage.height,
         'raw': rawBytes,
       });
-      debugPrint(
-          '⏱ [6] PNG encode done — ${pngBytes.length} bytes (${sw.elapsedMilliseconds}ms)');
 
       if (!mounted) return;
-      final provider = Provider.of<PhotoProvider>(context, listen: false);
       provider.setFinalImageBytes(pngBytes);
 
-      if (mounted) setState(() => _uploadStatus = 'Mengupload ke server...');
+      await _uploadFinalResult(pngBytes, provider.sessionUuid);
+    } catch (e) {
+      debugPrint('❌ Capture/Upload error: $e');
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+          _uploadStatus = 'Gagal render/upload.';
+        });
+      }
+    }
+  }
 
-      // Step D — upload ke server
+  Future<void> _uploadFinalResult(Uint8List pngBytes, String sessionUuid) async {
+    final sw = Stopwatch()..start();
+    if (mounted) setState(() => _uploadStatus = 'Mengupload ke server...');
+
+    try {
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(
-          '${tempDir.path}/result_${DateTime.now().millisecondsSinceEpoch}.png');
+      final tempFile = File('${tempDir.path}/result_${DateTime.now().millisecondsSinceEpoch}.png');
       await tempFile.writeAsBytes(pngBytes);
-      debugPrint('⏱ [7] tempFile written (${sw.elapsedMilliseconds}ms)');
 
       final uri = Uri.parse('$_backendUrl/api/photobooth/upload/final');
       final request = http.MultipartRequest('POST', uri)
-        ..fields['session_uuid'] = provider.sessionUuid
+        ..fields['session_uuid'] = sessionUuid
         ..files.add(await http.MultipartFile.fromPath('photo', tempFile.path,
             contentType: http_parser.MediaType('image', 'png')));
 
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
-      debugPrint(
-          '⏱ [8] upload done — status: ${response.statusCode} (${sw.elapsedMilliseconds}ms)');
 
-      try {
-        await tempFile.delete();
-      } catch (_) {}
+      try { await tempFile.delete(); } catch (_) {}
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        debugPrint('✅ Upload berhasil! status: ${response.statusCode} (${sw.elapsedMilliseconds}ms)');
         if (mounted) {
           setState(() {
             _isUploaded = true;
@@ -648,22 +637,17 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
             _uploadStatus = '';
           });
         }
-        debugPrint('✅ [9] Total: ${sw.elapsedMilliseconds}ms');
       } else {
-        if (mounted) {
-          setState(() {
-            _isUploading = false;
-            _uploadStatus = 'Upload gagal: ${response.statusCode}';
-          });
-        }
+        throw Exception('Upload Failed: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint("❌ Capture/Upload error: $e");
-      if (mounted)
+      debugPrint("❌ Upload error: $e");
+      if (mounted) {
         setState(() {
           _isUploading = false;
-          _uploadStatus = 'Error: $e';
+          _uploadStatus = 'Error upload.';
         });
+      }
     }
   }
 
@@ -687,8 +671,7 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
                         strokeWidth: 2, color: Colors.white54)),
                 const SizedBox(width: 8),
                 Text(_uploadStatus,
-                    style:
-                        const TextStyle(color: Colors.white54, fontSize: 11)),
+                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
               ] else if (_isUploaded) ...[
                 const Icon(Icons.cloud_done_rounded,
                     color: Colors.greenAccent, size: 18),
@@ -706,9 +689,6 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
           final frameH = provider.selectedFrameHeight;
 
           return Center(
-            // ✅ FIX: RepaintBoundary di LUAR FittedBox
-            // → boundary.size = ukuran layar (~500px), bukan frameW (2480px)
-            // → toImage() jauh lebih ringan, PNG encode turun dari 5s ke ~0.5s
             child: RepaintBoundary(
               key: _globalKey,
               child: AspectRatio(
@@ -740,21 +720,17 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // PATH A: Custom slots dari web editor
           if (provider.hasCustomSlots)
             ..._buildSlotWidgets(provider, w, h)
-          // PATH B: Fallback GridView lama
           else
             _buildGridFallback(provider),
 
-          // Frame overlay — di atas foto
           if (provider.selectedFrameAsset != null)
             IgnorePointer(
               child: provider.selectedFrameAsset!.startsWith('http')
                   ? Image.network(
                       provider.selectedFrameAsset!,
                       fit: BoxFit.fill,
-                      // Tidak perlu loading builder — sudah di-precache
                       frameBuilder: (ctx, child, frame, _) => child,
                       errorBuilder: (ctx, e, st) => const SizedBox.shrink(),
                     )

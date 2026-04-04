@@ -11,13 +11,13 @@ class ImageFilterUtil {
     var image = img.decodeImage(imageData);
     if (image == null) return imageData;
 
-    // 1.2 Limit resolusi agar tidak terlalu berat (DSLR 24MP → ~4MP)
-    // 2500px sudah Ultra-HD dan sangat cukup untuk cetak profesional
-    if (image.width > 2500 || image.height > 2500) {
+    // 1.2 Limit resolusi agar tidak terlalu berat (DSLR 24MP → 3000px ~9MP)
+    // 3000px sudah sangat tajam untuk cetak 4R profesional
+    if (image.width > 3000 || image.height > 3000) {
       if (image.width > image.height) {
-        image = img.copyResize(image, width: 2500);
+        image = img.copyResize(image, width: 3000);
       } else {
-        image = img.copyResize(image, height: 2500);
+        image = img.copyResize(image, height: 3000);
       }
     }
 
@@ -35,10 +35,9 @@ class ImageFilterUtil {
         break;
       case PhotoFilter.smooth:
         // PERBAIKAN: Gunakan sharpen tipis setelah blur agar tidak terlihat pecah/buram
-        filteredImage = img.gaussianBlur(selfieImage, radius: 1); // Radius dikurangi agar tidak terlalu blur
+        filteredImage = img.gaussianBlur(selfieImage, radius: 1); 
         break;
       case PhotoFilter.brightness:
-        // Menaikkan brightness tanpa merusak pixel
         filteredImage = img.adjustColor(selfieImage, brightness: 1.15);
         break;
       case PhotoFilter.none:
@@ -46,10 +45,8 @@ class ImageFilterUtil {
         filteredImage = selfieImage;
     }
 
-    // --- PERBAIKAN VITAL DISINI ---
-    // Tambahkan quality: 100 agar tidak ada kompresi yang merusak hasil cetak.
-    // Tanpa ini, printer Epson SL-D500 akan mencetak bintik-bintik (noise).
-    return Uint8List.fromList(img.encodeJpg(filteredImage, quality: 100));
+    // JPEG quality 98 adalah sweet spot (hampir lossless tapi jauh lebih ringan dari PNG)
+    return Uint8List.fromList(img.encodeJpg(filteredImage, quality: 98));
   }
 
   static img.Image _applyVintageFilter(img.Image image) {
