@@ -8,7 +8,7 @@ class ConfigService {
 
   // URLs
   static const String localUrl = "http://localhost:3001";
-  static const String remoteUrl = "http://168.231.125.203:8181";
+  static const String remoteUrl = "https://api.amandya.tech";
 
   // Current active URL
   String _baseUrl = localUrl;
