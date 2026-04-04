@@ -7,9 +7,6 @@ import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -19,6 +16,8 @@ import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:photobooth_app/providers/photo_provider.dart';
 import 'package:photobooth_app/screens/splash_screen.dart';
 import 'package:photobooth_app/services/config_service.dart';
+import 'package:photobooth_app/services/history_service.dart';
+import 'package:photobooth_app/services/print_service.dart';
 
 // ============================================================
 // TOP-LEVEL ISOLATE FUNCTION — encode PNG di background thread
@@ -86,75 +85,23 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
       ),
     );
 
-    bool printSuccess = false;
-
     try {
-      const double width4R = 4.0 * 72.0;
-      const double height4R = 6.0 * 72.0;
-      final pdfFormat = PdfPageFormat(width4R, height4R, marginAll: 0);
-
-      Future<Uint8List> generateDoc(PdfPageFormat format) async {
-        final doc = pw.Document();
-        final image = pw.MemoryImage(provider.finalImageBytes!);
-        doc.addPage(pw.Page(
-          pageFormat: format,
-          build: (_) => pw.FullPage(
-              ignoreMargins: true,
-              child: pw.Image(image, fit: pw.BoxFit.cover, dpi: 300)),
-        ));
-        return doc.save();
-      }
-
-      Printer? targetPrinter;
-      try {
-        final printers = await Printing.listPrinters();
-        targetPrinter = printers.firstWhere(
-          (p) =>
-              p.name.toLowerCase().contains("epson") ||
-              p.name.toLowerCase().contains("d500"),
-          orElse: () => printers.firstWhere((p) => p.isDefault,
-              orElse: () => printers.first),
-        );
-      } catch (e) {
-        debugPrint("⚠️ Gagal scan printer: $e");
-      }
-
-      if (targetPrinter != null && targetPrinter.isAvailable) {
-        printSuccess = await Printing.directPrintPdf(
-          printer: targetPrinter,
-          onLayout: (f) async => generateDoc(pdfFormat),
-          format: pdfFormat,
-          usePrinterSettings: true,
-        );
+      final success = await PrintService().printStrip(
+        context, 
+        provider.finalImageBytes!,
+        sessionUuid: provider.sessionUuid,
+      );
+      
+      if (mounted) Navigator.pop(context);
+      
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("✅ Sent to Printer!"),
+            backgroundColor: Colors.green));
       }
     } catch (e) {
+      if (mounted) Navigator.pop(context);
       debugPrint("❌ Print error: $e");
-    } finally {
-      if (context.mounted) Navigator.pop(context);
-      if (!printSuccess) {
-        if (context.mounted) {
-          await Printing.layoutPdf(
-            onLayout: (_) async {
-              final doc = pw.Document();
-              final image = pw.MemoryImage(provider.finalImageBytes!);
-              doc.addPage(pw.Page(
-                pageFormat: PdfPageFormat(4.0 * 72, 6.0 * 72, marginAll: 0),
-                build: (_) => pw.FullPage(
-                    ignoreMargins: true,
-                    child: pw.Image(image, fit: pw.BoxFit.cover, dpi: 300)),
-              ));
-              return doc.save();
-            },
-            name: 'Photobooth_${provider.sessionUuid}',
-          );
-        }
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text("✅ Sent to Printer!"),
-              backgroundColor: Colors.green));
-        }
-      }
     }
   }
 
@@ -616,6 +563,9 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
       final tempDir = await getTemporaryDirectory();
       final tempFile = File('${tempDir.path}/result_${DateTime.now().millisecondsSinceEpoch}.png');
       await tempFile.writeAsBytes(pngBytes);
+
+      // 💾 Simpan ke history lokal (Owner Dashboard)
+      await HistoryService().saveToHistory(sessionUuid, pngBytes);
 
       final uri = Uri.parse('$_backendUrl/api/photobooth/upload/final');
       final request = http.MultipartRequest('POST', uri)

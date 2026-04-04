@@ -9,6 +9,8 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:photobooth_app/screens/splash_screen.dart';
 import 'package:photobooth_app/services/license_service.dart';
 import 'package:photobooth_app/services/config_service.dart';
+import 'package:photobooth_app/services/history_service.dart';
+import 'package:photobooth_app/services/print_service.dart';
 
 class DiagnosticPage extends StatefulWidget {
   const DiagnosticPage({super.key});
@@ -32,10 +34,10 @@ class _DiagnosticPageState extends State<DiagnosticPage>
   String _printerMessage = 'Mendeteksi printer...';
   List<_PrinterInfo> _printers = [];
 
-  // Recent photos
+  // History
   _CheckStatus _photosStatus = _CheckStatus.loading;
-  String _photosMessage = 'Mengambil foto terakhir...';
-  List<_RecentPhoto> _recentPhotos = [];
+  String _photosMessage = 'Mengambil riwayat strip...';
+  List<_HistoryItem> _historyItems = [];
 
   // Server
   _CheckStatus _serverStatus = _CheckStatus.loading;
@@ -318,7 +320,7 @@ class _DiagnosticPageState extends State<DiagnosticPage>
   }
 
   // ================================================================
-  // 4. RECENT PHOTOS CHECK
+  // 4. HISTORY CHECK (Local + Server)
   // ================================================================
   Future<void> _checkRecentPhotos() async {
     if (_hwid.isEmpty) {
@@ -332,55 +334,134 @@ class _DiagnosticPageState extends State<DiagnosticPage>
     }
 
     try {
-      final response = await http
-          .get(Uri.parse(
-              '$_backendUrl/api/photobooth/photos/recent?hwid=$_hwid&limit=10'))
-          .timeout(const Duration(seconds: 10));
+      // 1. Ambil dari lokal (Prioritas)
+      final localStrips = await HistoryService().getLocalHistory();
+      final List<_HistoryItem> items = localStrips.map((s) => _HistoryItem(
+        url: s.path,
+        isLocal: true,
+        sessionCode: s.sessionUuid,
+        createdAt: s.timestamp.toIso8601String(),
+        localBytes: s.bytes,
+      )).toList();
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List<dynamic> photos = data['data'] ?? data['photos'] ?? [];
+      // 2. Ambil dari server (Gunakan endpoint photos/recent tetapi kita modifikasi URL-nya)
+      try {
+        final cleanedHwid = _hwid.trim();
+        
+        final response = await http
+            .get(Uri.parse(
+                '$_backendUrl/api/photobooth/photos/recent?hwid=$cleanedHwid&limit=50'))
+            .timeout(const Duration(seconds: 12));
 
-        final photoList = photos.map((p) {
-          return _RecentPhoto(
-            url: p['url'] ?? p['photo_url'] ?? '',
-            sessionCode: p['transaction_code'] ?? p['session_code'] ?? '',
-            createdAt: p['created_at'] ?? '',
-          );
-        }).toList();
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final List<dynamic> photos = data['data'] ?? data['photos'] ?? [];
 
-        if (mounted) {
-          setState(() {
-            _recentPhotos = photoList;
-            _photosStatus =
-                photoList.isEmpty ? _CheckStatus.warning : _CheckStatus.success;
-            _photosMessage = photoList.isEmpty
-                ? 'Belum ada foto dari device ini'
-                : '${photoList.length} foto terakhir ditemukan';
-          });
+          for (var p in photos) {
+            final String rawUrl = p['photo_url'] ?? p['url'] ?? '';
+            final String code = p['transaction_code'] ?? p['session_code'] ?? '';
+            
+            if (rawUrl.isEmpty || code.isEmpty) continue;
+
+            // ✅ TRIK CERDAS: Ubah URL foto mentah menjadi URL final.png
+            // Dari: .../public/photos/[client]/[session]/12345.jpg
+            // Ke:   .../public/results/[client]/[session]/final.png
+            String finalUrl = rawUrl.replaceFirst('/photos/', '/results/');
+            
+            // Hapus filename asli (misal: 12345.jpg) lalu tambahkan final.png
+            List<String> urlParts = finalUrl.split('/');
+            urlParts.removeLast();
+            urlParts.add('final.png');
+            finalUrl = urlParts.join('/');
+
+            // Hindari duplikat jika sudah ada dari foto lain dalam sesi yang sama atau di lokal
+            if (!items.any((item) => item.sessionCode == code)) {
+              items.add(_HistoryItem(
+                url: finalUrl,
+                isLocal: false,
+                sessionCode: code,
+                createdAt: p['created_at'] ?? '',
+              ));
+            }
+          }
+        } else {
+          debugPrint("❌ Server error ${response.statusCode}");
         }
-      } else if (response.statusCode == 404) {
-        if (mounted) {
-          setState(() {
-            _photosStatus = _CheckStatus.warning;
-            _photosMessage =
-                'Endpoint belum tersedia (404). Tambahkan API /recent-photos di backend.';
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _photosStatus = _CheckStatus.error;
-            _photosMessage = 'Error: ${response.statusCode}';
-          });
-        }
+      } catch (e) {
+        debugPrint("⚠️ Gagal sync server history: $e");
+        // Lanjut dengan data lokal saja
+      }
+
+      if (mounted) {
+        setState(() {
+          _historyItems = items;
+          _photosStatus = items.isEmpty ? _CheckStatus.warning : _CheckStatus.success;
+          _photosMessage = items.isEmpty
+              ? 'Belum ada riwayat strip'
+              : 'Ditemukan ${items.length} strip (Local + Server)';
+        });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _photosStatus = _CheckStatus.error;
-          _photosMessage = 'Gagal mengambil foto: $e';
+          _photosMessage = 'Gagal mengambil riwayat: $e';
         });
+      }
+    }
+  }
+
+  Future<void> _reprintStrip(_HistoryItem item) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 12),
+            Text("Mempersiapkan Cetak Ulang...", style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      Uint8List? bytes;
+      if (item.isLocal && item.localBytes != null) {
+        bytes = item.localBytes;
+      } else {
+        // Download if from server
+        final resp = await http.get(Uri.parse(item.url));
+        if (resp.statusCode == 200) {
+          bytes = resp.bodyBytes;
+        }
+      }
+
+      if (mounted) Navigator.pop(context); // close loader
+
+      if (bytes != null) {
+        final success = await PrintService().printStrip(
+          context, 
+          bytes,
+          sessionUuid: item.sessionCode,
+        );
+
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('✅ Cetak ulang berhasil dikirim!'), backgroundColor: Colors.green),
+          );
+        }
+      } else {
+        throw Exception("Gagal mendapatkan data gambar");
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Gagal cetak ulang: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -698,7 +779,7 @@ startxref
                               _serverMessage = 'Mengecek koneksi server...';
                               _photosMessage = 'Mengambil foto terakhir...';
                               _printers = [];
-                              _recentPhotos = [];
+                              _historyItems = [];
                             });
                             _runAllChecks();
                           },
@@ -789,7 +870,7 @@ startxref
                       ),
                       const SizedBox(width: 8),
                       const Text(
-                        'Hasil Foto Terakhir',
+                        'Riwayat Strip (Owner Only)',
                         style: TextStyle(
                           fontFamily: 'Poppins',
                           color: Colors.black87,
@@ -808,7 +889,7 @@ startxref
                               strokeWidth: 3,
                             ),
                           )
-                        : _recentPhotos.isEmpty
+                        : _historyItems.isEmpty
                             ? const Center(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
@@ -820,7 +901,7 @@ startxref
                                     ),
                                     SizedBox(height: 12),
                                     Text(
-                                      'Belum ada foto',
+                                      'Belum ada riwayat',
                                       style: TextStyle(
                                         color: Colors.black54,
                                         fontSize: 14,
@@ -830,18 +911,13 @@ startxref
                                   ],
                                 ),
                               )
-                            : GridView.builder(
-                                gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 10,
-                                  mainAxisSpacing: 10,
-                                  childAspectRatio: 0.7,
-                                ),
-                                itemCount: _recentPhotos.length,
+                            : ListView.separated(
+                                padding: const EdgeInsets.only(bottom: 20),
+                                itemCount: _historyItems.length,
+                                separatorBuilder: (_, __) => const SizedBox(height: 16),
                                 itemBuilder: (ctx, i) {
-                                  final photo = _recentPhotos[i];
-                                  return _buildPhotoCard(photo, i);
+                                  final item = _historyItems[i];
+                                  return _buildHistoryCard(item, i);
                                 },
                               ),
                   ),
@@ -1052,128 +1128,99 @@ startxref
     );
   }
 
-  Widget _buildPhotoCard(_RecentPhoto photo, int index) {
+  Widget _buildHistoryCard(_HistoryItem item, int index) {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.06),
-        ),
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black, width: 2.5),
+        boxShadow: const [
+          BoxShadow(color: Colors.black, offset: Offset(4, 4))
+        ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Photo
-            photo.url.isNotEmpty
-                ? Image.network(
-                    photo.url,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: Colors.white.withOpacity(0.03),
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: Colors.white.withOpacity(0.15),
-                        size: 28,
-                      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Strip Preview
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+            child: AspectRatio(
+              aspectRatio: 1 / 1.5, // Menyerupai strip vertikal
+              child: item.isLocal
+                  ? Image.file(
+                      File(item.url),
+                      fit: BoxFit.cover,
+                      alignment: Alignment.topCenter,
+                    )
+                  : Image.network(
+                      item.url,
+                      fit: BoxFit.cover,
+                      alignment: Alignment.topCenter,
+                      loadingBuilder: (_, child, prog) => prog == null ? child : const Center(child: CircularProgressIndicator()),
+                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 40),
                     ),
-                    loadingBuilder: (_, child, progress) {
-                      if (progress == null) return child;
-                      return Container(
-                        color: Colors.white.withOpacity(0.03),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: Colors.white24,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  )
-                : Container(
-                    color: Colors.white.withOpacity(0.03),
-                    child: Icon(
-                      Icons.image_outlined,
-                      color: Colors.white.withOpacity(0.1),
-                    ),
-                  ),
-
-            // Bottom info overlay
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.8),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+          ),
+          
+          // Info & Action
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    if (photo.sessionCode.isNotEmpty)
-                      Text(
-                        photo.sessionCode.length > 12
-                            ? '${photo.sessionCode.substring(0, 12)}...'
-                            : photo.sessionCode,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 9,
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w500,
-                        ),
+                    Text(
+                      item.isLocal ? '💾 LOKAL' : '☁️ SERVER',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: item.isLocal ? Colors.blue : Colors.orange,
                       ),
-                    if (photo.createdAt.isNotEmpty)
-                      Text(
-                        _formatDate(photo.createdAt),
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.35),
-                          fontSize: 8,
-                          fontFamily: 'Poppins',
-                        ),
-                      ),
+                    ),
+                    Text(
+                      _formatDate(item.createdAt),
+                      style: const TextStyle(fontSize: 9, color: Colors.black54),
+                    ),
                   ],
                 ),
-              ),
-            ),
-
-            // Index badge
-            Positioned(
-              top: 6,
-              left: 6,
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(6),
+                const SizedBox(height: 4),
+                Text(
+                  'ID: ${item.sessionCode}',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                child: Center(
-                  child: Text(
-                    '${index + 1}',
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
+                const SizedBox(height: 12),
+                
+                // Reprint Button
+                GestureDetector(
+                  onTap: () => _reprintStrip(item),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF6B6B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.black, width: 2),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.print, color: Colors.white, size: 14),
+                        SizedBox(width: 8),
+                        Text(
+                          'CETAK ULANG',
+                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1250,14 +1297,18 @@ class _PrinterInfo {
   });
 }
 
-class _RecentPhoto {
+class _HistoryItem {
   final String url;
+  final bool isLocal;
   final String sessionCode;
   final String createdAt;
+  final Uint8List? localBytes;
 
-  _RecentPhoto({
+  _HistoryItem({
     required this.url,
+    required this.isLocal,
     required this.sessionCode,
     required this.createdAt,
+    this.localBytes,
   });
 }
