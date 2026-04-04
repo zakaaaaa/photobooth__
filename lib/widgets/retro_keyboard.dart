@@ -12,34 +12,46 @@ class RetroKeyboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<String> keys = [
-      '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
-      'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-      'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
-      'U', 'V', 'W', 'X', 'Y', 'Z', 'BACKSPACE'
+    final List<List<String>> rows = [
+      ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+      ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+      ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+      ['Z', 'X', 'C', 'V', 'B', 'N', 'M', 'BACKSPACE'],
     ];
 
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
         color: const Color(0xFFC0C0C0),
         border: Border.all(color: Colors.black, width: 1),
       ),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        alignment: WrapAlignment.center,
-        children: keys.map((key) {
-          if (key == 'BACKSPACE') {
-            return _RetroKey(
-              onTap: _handleBackspace,
-              child: const Icon(Icons.backspace_outlined, size: 20),
-              width: 100,
-            );
-          }
-          return _RetroKey(
-            label: key,
-            onTap: () => _handleKeyTap(key),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: rows.map((row) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: row.map((key) {
+                if (key == 'BACKSPACE') {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: _RetroKey(
+                      onTap: _handleBackspace,
+                      width: 70, 
+                      child: const Icon(Icons.backspace_outlined, size: 20),
+                    ),
+                  );
+                }
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: _RetroKey(
+                    label: key,
+                    onTap: () => _handleKeyTap(key),
+                  ),
+                );
+              }).toList(),
+            ),
           );
         }).toList(),
       ),
