@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
+import 'config_service.dart';
 
 class LicenseService {
-  // URL Endpoint (Sudah benar sesuai context sebelumnya)
-  final String _baseUrl = 'http://168.231.125.203:8181/api/photobooth/license/check';
+  // URL Endpoint (Dinamis: Local vs Remote)
+  String get _baseUrl => '${ConfigService().baseUrl}/api/photobooth/license/check';
 
   Future<Map<String, dynamic>> checkLicense() async {
     // PERUBAHAN 1: Panggil fungsi public (tanpa garis bawah)
@@ -22,9 +23,9 @@ class LicenseService {
           'Accept': 'application/json',
         },
         body: jsonEncode({
-          'hwid': hwid, 
+          'hwid': hwid,
         }),
-      );
+      ).timeout(const Duration(seconds: 10)); // Timeout 10 detik
 
       print("DEBUG: API RESPONSE -> ${response.body}");
 

@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'config_service.dart';
 
 class ApiService {
-  // ✅ Ganti ke VPS baru
-  final String baseUrl = "https://api.amandya.tech/api";
+  // ✅ Dinamis: Local (dev) atau VPS (prod)
+  final String baseUrl = "${ConfigService().baseUrl}/api";
 
   // =================================================================
   // 1. LICENSE CHECK

@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:photobooth_app/screens/splash_screen.dart';
 import 'package:photobooth_app/services/license_service.dart';
+import 'package:photobooth_app/services/config_service.dart';
 
 class DiagnosticPage extends StatefulWidget {
   const DiagnosticPage({super.key});
@@ -45,7 +46,7 @@ class _DiagnosticPageState extends State<DiagnosticPage>
   late Animation<double> _fadeAnimation;
   late AnimationController _pulseController;
 
-  static const String _backendUrl = 'https://api.amandya.tech';
+  static final String _backendUrl = ConfigService().baseUrl;
 
   @override
   void initState() {
@@ -583,8 +584,8 @@ startxref
                                 color: Colors.black54,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Text(
-                                'HWID: ${_hwid.isNotEmpty ? _hwid.substring(0, _hwid.length > 20 ? 20 : _hwid.length) + '...' : 'detecting...'}',
+                              child: SelectableText(
+                                'HWID: ${_hwid.isNotEmpty ? _hwid : 'detecting...'}',
                                 style: const TextStyle(
                                   fontFamily: 'Poppins',
                                   color: Colors.white,

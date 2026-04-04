@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import '../services/config_service.dart';
 import '../providers/photo_provider.dart';
 import 'camera_page.dart';
 
@@ -96,7 +97,7 @@ class _StaticFrameTemplatePageState extends State<StaticFrameTemplatePage> {
   bool _isLoading = true;
   String _error   = '';
 
-  static const String _baseUrl = 'http://168.231.125.203:8181/api';
+  static final String _baseUrl = '${ConfigService().baseUrl}/api';
 
   @override
   void initState() {

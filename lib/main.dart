@@ -8,12 +8,16 @@ import 'package:photobooth_app/providers/photo_provider.dart';
 import 'package:photobooth_app/screens/diagnostic_page.dart';
 import 'package:photobooth_app/screens/splash_screen.dart';
 import 'package:photobooth_app/services/api_service.dart';
+import 'package:photobooth_app/services/config_service.dart';
 
 // ── Global navigator key — dipakai untuk navigasi dari mana saja ──
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // ── Backend Auto-Discovery ──
+  await ConfigService().init();
 
   // ── Fullscreen setup ──
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
@@ -21,10 +25,10 @@ Future<void> main() async {
       await windowManager.ensureInitialized();
 
       WindowOptions windowOptions = const WindowOptions(
-        fullScreen: true,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        titleBarStyle: TitleBarStyle.hidden,
+        fullScreen: false, // Disabled for development
+        alwaysOnTop: false, // Disabled for development
+        skipTaskbar: false,
+        titleBarStyle: TitleBarStyle.normal, // Restore title bar
       );
 
       // Async: Jangan block runApp

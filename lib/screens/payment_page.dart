@@ -6,6 +6,7 @@ import 'package:webview_windows/webview_windows.dart';
 import '../providers/photo_provider.dart';
 import '../services/api_service.dart';
 import 'static_frame_template_page.dart';
+import '../widgets/retro_keyboard.dart';
 
 class PaymentPage extends StatefulWidget {
   const PaymentPage({super.key});
@@ -778,7 +779,7 @@ class _PaymentPageState extends State<PaymentPage> {
   // ── VOUCHER INPUT ──
   Widget _buildVoucherInput() {
     return Container(
-      width: 420,
+      width: 580, // Increased width to fit keyboard
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: const Color(0xFFC0C0C0),
@@ -810,12 +811,14 @@ class _PaymentPageState extends State<PaymentPage> {
             const SizedBox(height: 12),
             TextField(
               controller: _voucherController,
+              readOnly: true, // Prevent system keyboard
+              enableInteractiveSelection: false, // Prevent cursor/selection
               textCapitalization: TextCapitalization.characters,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  fontSize: 20,
+                  fontSize: 24, // Slightly larger
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 4),
+                  letterSpacing: 6), // Increased letter spacing
               decoration: InputDecoration(
                 hintText: "XXXXX",
                 hintStyle: const TextStyle(color: Colors.black38),
@@ -828,7 +831,19 @@ class _PaymentPageState extends State<PaymentPage> {
                 errorText: _voucherError.isNotEmpty ? _voucherError : null,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
+            
+            // Integrated Retro Keyboard
+            RetroKeyboard(
+              controller: _voucherController,
+              onKeyTapped: () {
+                if (_voucherError.isNotEmpty) {
+                  setState(() => _voucherError = "");
+                }
+              },
+            ),
+            
+            const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -841,14 +856,14 @@ class _PaymentPageState extends State<PaymentPage> {
                 onPressed:
                     _isValidatingVoucher ? null : _validateAndUseVoucher,
                 child: _isValidatingVoucher
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : const Text("GUNAKAN VOUCHER",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Text("GUNAKAN VOUCHER",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, letterSpacing: 1)),
               ),
             ),
             const SizedBox(height: 10),
