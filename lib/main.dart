@@ -25,10 +25,10 @@ Future<void> main() async {
       await windowManager.ensureInitialized();
 
       WindowOptions windowOptions = const WindowOptions(
-        fullScreen: false, // Disabled for development
-        alwaysOnTop: false, // Disabled for development
-        skipTaskbar: false,
-        titleBarStyle: TitleBarStyle.normal, // Restore title bar
+        fullScreen: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        titleBarStyle: TitleBarStyle.hidden,
       );
 
       // Async: Jangan block runApp
