@@ -876,9 +876,11 @@ startxref
                                   label: _allDone
                                       ? (_allPassed
                                           ? 'Lanjutkan'
-                                          : 'Lanjutkan Anyway')
+                                          : 'Perlu Perbaikan')
                                       : 'Checking...',
-                                  onTap: _allDone ? _proceedToApp : null,
+                                  onTap: (_allDone && _allPassed)
+                                      ? _proceedToApp
+                                      : null,
                                   color: _allDone
                                       ? (_allPassed
                                           ? const Color(0xFF00BFA5) // Teal

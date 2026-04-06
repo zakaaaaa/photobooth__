@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'config_service.dart';
 
 class ApiService {
+  static const Set<String> _allowedPaymentMethods = {'qris', 'voucher'};
+
   // ✅ Dinamis: Local (dev) atau VPS (prod)
   String get baseUrl => "${ConfigService().baseUrl}/api";
 
@@ -39,6 +41,11 @@ class ApiService {
     String amount = '0',
     String? voucherCode,
   }) async {
+    if (!_allowedPaymentMethods.contains(paymentMethod)) {
+      AppLogger.warn(
+          "Rejected unsupported payment method: $paymentMethod (uuid: $uuid)");
+      return false;
+    }
     try {
       final uri = Uri.parse("$baseUrl/photobooth/session/start");
       AppLogger.debug("🚀 Start Session ($paymentMethod) HWID: $hwid");

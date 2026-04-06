@@ -68,7 +68,8 @@ class _PaymentPageState extends State<PaymentPage> {
   /// Run environment diagnostics on page load
   Future<void> _runEnvironmentCheck() async {
     _log("=== ENVIRONMENT CHECK START ===");
-    _log("Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}");
+    _log(
+        "Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}");
     _log("Dart version: ${Platform.version}");
     _log("Executable: ${Platform.resolvedExecutable}");
 
@@ -78,7 +79,8 @@ class _PaymentPageState extends State<PaymentPage> {
       _log("✅ WebView2 Runtime version: $webviewVersion");
     } catch (e) {
       _log("❌ WebView2 Runtime NOT FOUND or error: $e");
-      _log("   → Install from: https://developer.microsoft.com/en-us/microsoft-edge/webview2/");
+      _log(
+          "   → Install from: https://developer.microsoft.com/en-us/microsoft-edge/webview2/");
     }
 
     // Check network connectivity to common endpoints
@@ -107,50 +109,6 @@ class _PaymentPageState extends State<PaymentPage> {
     }
 
     _log("=== ENVIRONMENT CHECK END ===");
-  }
-
-  // ================================================================
-  // BYPASS — Long press pojok kiri bawah, tetap catat ke DB
-  // ================================================================
-  void _triggerBypass() async {
-    final provider = Provider.of<PhotoProvider>(context, listen: false);
-    provider.reset();
-
-    final apiService = Provider.of<ApiService>(context, listen: false);
-
-    if (provider.machineId.isEmpty) await provider.initMachineId();
-
-    final bypassUuid = "bypass-${DateTime.now().millisecondsSinceEpoch}";
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("🚀 DEV MODE: Mendaftarkan sesi bypass..."),
-        duration: Duration(seconds: 2),
-        backgroundColor: Colors.orange,
-      ),
-    );
-
-    final success = await apiService.startSession(
-      bypassUuid,
-      hwid: provider.machineId,
-      paymentMethod: 'bypass',
-      amount: '0',
-    );
-
-    if (success) {
-      provider.setSessionUuid(bypassUuid);
-      _handlePaymentSuccess();
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("❌ Gagal Bypass: Tidak bisa konek ke server."),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 
   // ================================================================
@@ -548,8 +506,7 @@ class _PaymentPageState extends State<PaymentPage> {
         if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-                builder: (_) => const StaticFrameTemplatePage()),
+            MaterialPageRoute(builder: (_) => const StaticFrameTemplatePage()),
           );
         }
       });
@@ -588,18 +545,6 @@ class _PaymentPageState extends State<PaymentPage> {
                 : _isVoucherMode
                     ? _buildVoucherInput()
                     : _buildPaymentWebView(),
-          ),
-
-
-          // Bypass button
-          Positioned(
-            bottom: 0,
-            left: 0,
-            child: GestureDetector(
-              onLongPress: _triggerBypass,
-              child:
-                  Container(width: 80, height: 80, color: Colors.transparent),
-            ),
           ),
         ],
       ),
@@ -698,8 +643,7 @@ class _PaymentPageState extends State<PaymentPage> {
                                     Text(
                                       "Jika stuck, klik SHOW DEBUG",
                                       style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.black45),
+                                          fontSize: 11, color: Colors.black45),
                                     ),
                                   ],
                                 ),
@@ -834,7 +778,7 @@ class _PaymentPageState extends State<PaymentPage> {
               ),
             ),
             const SizedBox(height: 20),
-            
+
             // Integrated Retro Keyboard
             RetroKeyboard(
               controller: _voucherController,
@@ -844,7 +788,7 @@ class _PaymentPageState extends State<PaymentPage> {
                 }
               },
             ),
-            
+
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
@@ -855,17 +799,16 @@ class _PaymentPageState extends State<PaymentPage> {
                   shape: const BeveledRectangleBorder(),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                onPressed:
-                    _isValidatingVoucher ? null : _validateAndUseVoucher,
+                onPressed: _isValidatingVoucher ? null : _validateAndUseVoucher,
                 child: _isValidatingVoucher
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Text("GUNAKAN VOUCHER",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                    : const Text("GUNAKAN VOUCHER",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, letterSpacing: 1)),
               ),
             ),
             const SizedBox(height: 10),
