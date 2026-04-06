@@ -62,7 +62,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
   bool _isExtraPaid = false;
   static const int _extraPrintPrice = 10000;
 
-  static const String _frontendUrl = 'https://app.amandya.tech';
+  static final String _frontendUrl = ConfigService().frontendUrl;
 
   Future<void> _printPhoto({int quantity = 1}) async {
     if (_hasPrinted && quantity == 1) return;
