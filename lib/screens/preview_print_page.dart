@@ -63,9 +63,8 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
   static const int _extraPrintPrice = 10000;
 
   static const String _frontendUrl = 'https://app.amandya.tech';
-  static final String _backendUrl = ConfigService().baseUrl;
 
-  Future<void> _printPhoto(BuildContext context, {int quantity = 1}) async {
+  Future<void> _printPhoto({int quantity = 1}) async {
     if (_hasPrinted && quantity == 1) return;
 
     final provider = Provider.of<PhotoProvider>(context, listen: false);
@@ -105,9 +104,10 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
         debugPrint("💾 Photo saved to local history after printing.");
       }
 
-      if (mounted) Navigator.pop(context);
+      if (!mounted) return;
+      Navigator.pop(context);
 
-      if (success && mounted) {
+      if (success) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text("✅ Sent to Printer!"),
             backgroundColor: Colors.green));
@@ -118,7 +118,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
     }
   }
 
-  Future<void> _payAndPrintExtra(BuildContext context) async {
+  Future<void> _payAndPrintExtra() async {
     if (_extraPrints <= 0) return;
 
     final provider = Provider.of<PhotoProvider>(context, listen: false);
@@ -135,8 +135,9 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
 
       // 2. Get payment link
       final paymentUrl = await ApiService().generatePaymentLink(extraUuid);
-      if (paymentUrl == null)
+      if (paymentUrl == null) {
         throw Exception("Could not generate payment link.");
+      }
 
       // 3. Show payment dialog
       if (!mounted) return;
@@ -156,7 +157,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
             _isExtraPaid = true;
           });
           // After success, do the print
-          _printPhoto(context, quantity: 1 + _extraPrints);
+          _printPhoto(quantity: 1 + _extraPrints);
         }
       }
     } catch (e) {
@@ -184,29 +185,6 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
         child: Icon(icon, color: Colors.white, size: 20),
       ),
     );
-  }
-
-  Future<void> _downloadPhotoToLocal(BuildContext context) async {
-    final provider = Provider.of<PhotoProvider>(context, listen: false);
-    if (provider.finalImageBytes == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please wait, preparing photo...")));
-      return;
-    }
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'Photobooth_Result_$timestamp.png';
-      final savePath = '${dir.path}/$fileName';
-      await File(savePath).writeAsBytes(provider.finalImageBytes!);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("✅ Saved: $fileName"),
-            backgroundColor: Colors.blueAccent));
-      }
-    } catch (e) {
-      debugPrint("Download Error: $e");
-    }
   }
 
   @override
@@ -283,13 +261,13 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                             constraints: const BoxConstraints(maxWidth: 550),
                             padding: const EdgeInsets.all(15),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
+                              color: Colors.black.withValues(alpha: 0.5),
                               borderRadius: BorderRadius.circular(20),
                               border:
                                   Border.all(color: Colors.white24, width: 1.5),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.3),
+                                  color: Colors.black.withValues(alpha: 0.3),
                                   blurRadius: 10,
                                   offset: const Offset(0, 5),
                                 ),
@@ -305,8 +283,8 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                                     const SizedBox(width: 10),
                                     Text("EXTRA PRINTS",
                                         style: TextStyle(
-                                            color:
-                                                Colors.white.withOpacity(0.9),
+                                            color: Colors.white
+                                                .withValues(alpha: 0.9),
                                             fontFamily: 'Ambitsek',
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,
@@ -347,12 +325,12 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                                             horizontal: 15, vertical: 8),
                                         decoration: BoxDecoration(
                                           color: Colors.yellowAccent
-                                              .withOpacity(0.1),
+                                              .withValues(alpha: 0.1),
                                           borderRadius:
                                               BorderRadius.circular(10),
                                           border: Border.all(
                                               color: Colors.yellowAccent
-                                                  .withOpacity(0.3)),
+                                                  .withValues(alpha: 0.3)),
                                         ),
                                         child: Column(
                                           crossAxisAlignment:
@@ -415,9 +393,9 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                                     ? () {}
                                     : () {
                                         if (_extraPrints > 0 && !_isExtraPaid) {
-                                          _payAndPrintExtra(context);
+                                          _payAndPrintExtra();
                                         } else {
-                                          _printPhoto(context,
+                                          _printPhoto(
                                               quantity: 1 + _extraPrints);
                                         }
                                       }),
@@ -669,7 +647,6 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
   bool _isUploading = false;
   bool _isUploaded = false;
   String _uploadStatus = '';
-
   static final String _backendUrl = ConfigService().baseUrl;
 
   @override

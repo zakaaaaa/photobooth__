@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:printing/printing.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:photobooth_app/screens/splash_screen.dart';
 import 'package:photobooth_app/services/license_service.dart';
 import 'package:photobooth_app/services/config_service.dart';
@@ -27,7 +26,6 @@ class _DiagnosticPageState extends State<DiagnosticPage>
   // Camera
   _CheckStatus _cameraStatus = _CheckStatus.loading;
   String _cameraMessage = 'Mendeteksi kamera...';
-  String _cameraName = '';
 
   // Printer
   _CheckStatus _printerStatus = _CheckStatus.loading;
@@ -143,7 +141,6 @@ class _DiagnosticPageState extends State<DiagnosticPage>
           if (mounted) {
             setState(() {
               _cameraStatus = _CheckStatus.success;
-              _cameraName = name;
               _cameraMessage = name;
             });
           }
@@ -173,7 +170,6 @@ class _DiagnosticPageState extends State<DiagnosticPage>
           if (mounted) {
             setState(() {
               _cameraStatus = _CheckStatus.success;
-              _cameraName = cameras.first;
               _cameraMessage =
                   '${cameras.first}${cameras.length > 1 ? ' (+${cameras.length - 1} lainnya)' : ''}';
             });
@@ -191,7 +187,6 @@ class _DiagnosticPageState extends State<DiagnosticPage>
             if (mounted) {
               setState(() {
                 _cameraStatus = _CheckStatus.success;
-                _cameraName = nameMatch.group(1)!.trim();
                 _cameraMessage = nameMatch.group(1)!.trim();
               });
             }
@@ -341,18 +336,21 @@ class _DiagnosticPageState extends State<DiagnosticPage>
       final localStrips = await HistoryService().getLocalHistory();
       debugPrint("✅ Found ${localStrips.length} local strips.");
 
-      final List<_HistoryItem> items = localStrips.map((s) => _HistoryItem(
-        url: s.path,
-        isLocal: true,
-        sessionCode: s.sessionUuid,
-        createdAt: s.timestamp.toIso8601String(),
-        localBytes: s.bytes,
-      )).toList();
+      final List<_HistoryItem> items = localStrips
+          .map((s) => _HistoryItem(
+                url: s.path,
+                isLocal: true,
+                sessionCode: s.sessionUuid,
+                createdAt: s.timestamp.toIso8601String(),
+                localBytes: s.bytes,
+              ))
+          .toList();
 
       // 2. Ambil dari server
       try {
         final cleanedHwid = _hwid.trim();
-        final apiUrl = '${ConfigService().baseUrl}/api/photobooth/photos/recent?hwid=$cleanedHwid&limit=50';
+        final apiUrl =
+            '${ConfigService().baseUrl}/api/photobooth/photos/recent?hwid=$cleanedHwid&limit=50';
         debugPrint("🌐 Fetching server history from: $apiUrl");
 
         final response = await http
@@ -369,11 +367,13 @@ class _DiagnosticPageState extends State<DiagnosticPage>
           int addedCount = 0;
           for (var p in photos) {
             final String rawUrl = p['photo_url'] ?? p['url'] ?? '';
-            final String code = p['transaction_code'] ?? p['session_code'] ?? '';
+            final String code =
+                p['transaction_code'] ?? p['session_code'] ?? '';
             final String serverDate = p['created_at'] ?? '';
 
             if (rawUrl.isEmpty || code.isEmpty) {
-              debugPrint("⚠️ Skipping invalid photo data: url=$rawUrl code=$code");
+              debugPrint(
+                  "⚠️ Skipping invalid photo data: url=$rawUrl code=$code");
               continue;
             }
 
@@ -417,9 +417,10 @@ class _DiagnosticPageState extends State<DiagnosticPage>
           return 0; // Gagal parsing, biarkan urutan asli
         }
       });
-      
+
       if (items.isNotEmpty) {
-        debugPrint("📅 Newest item: ${items.first.sessionCode} (isLocal: ${items.first.isLocal})");
+        debugPrint(
+            "📅 Newest item: ${items.first.sessionCode} (isLocal: ${items.first.isLocal})");
         debugPrint("📅 URL: ${items.first.url}");
       }
 
@@ -428,7 +429,8 @@ class _DiagnosticPageState extends State<DiagnosticPage>
       if (mounted) {
         setState(() {
           _historyItems = items;
-          _photosStatus = items.isEmpty ? _CheckStatus.warning : _CheckStatus.success;
+          _photosStatus =
+              items.isEmpty ? _CheckStatus.warning : _CheckStatus.success;
           _photosMessage = items.isEmpty
               ? 'Belum ada riwayat strip'
               : 'Ditemukan ${items.length} strip (Local + Server)';
@@ -446,8 +448,9 @@ class _DiagnosticPageState extends State<DiagnosticPage>
   }
 
   Future<void> _reprintStrip(_HistoryItem item) async {
+    final pageContext = context;
     showDialog(
-      context: context,
+      context: pageContext,
       barrierDismissible: false,
       builder: (_) => const Center(
         child: Column(
@@ -455,7 +458,8 @@ class _DiagnosticPageState extends State<DiagnosticPage>
           children: [
             CircularProgressIndicator(color: Colors.white),
             SizedBox(height: 12),
-            Text("Mempersiapkan Cetak Ulang...", style: TextStyle(color: Colors.white)),
+            Text("Mempersiapkan Cetak Ulang...",
+                style: TextStyle(color: Colors.white)),
           ],
         ),
       ),
@@ -465,50 +469,58 @@ class _DiagnosticPageState extends State<DiagnosticPage>
       Uint8List? bytes;
       if (item.isLocal && item.localBytes != null) {
         bytes = item.localBytes;
-        debugPrint("💾 Reprinting from local storage...");
+        debugPrint("Reprinting from local storage...");
       } else {
-        // Download if from server
-        debugPrint("☁️ Downloading from server for reprint: ${item.url}");
-        final resp = await http.get(Uri.parse(item.url)).timeout(const Duration(seconds: 15));
+        debugPrint("Downloading from server for reprint: ${item.url}");
+        final resp = await http
+            .get(Uri.parse(item.url))
+            .timeout(const Duration(seconds: 15));
         if (resp.statusCode == 200) {
           bytes = resp.bodyBytes;
-          debugPrint("✅ Download success: ${bytes.length} bytes");
+          debugPrint("Download success: ${bytes.length} bytes");
         } else {
-          debugPrint("❌ Download failed: ${resp.statusCode} - ${resp.body}");
-          throw Exception("Server returns ${resp.statusCode}. Image might not be ready yet.");
+          debugPrint("Download failed: ${resp.statusCode} - ${resp.body}");
+          throw Exception(
+              "Server returns ${resp.statusCode}. Image might not be ready yet.");
         }
       }
 
-      if (mounted) Navigator.pop(context); // close loader
+      if (pageContext.mounted) Navigator.pop(pageContext);
 
       if (bytes != null) {
+        if (!pageContext.mounted) return;
         final success = await PrintService().printStrip(
-          context, 
+          pageContext,
           bytes,
           sessionUuid: item.sessionCode,
         );
 
-        if (success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('✅ Cetak ulang berhasil dikirim!'), backgroundColor: Colors.green),
+        if (success && pageContext.mounted) {
+          ScaffoldMessenger.of(pageContext).showSnackBar(
+            const SnackBar(
+              content: Text('Cetak ulang berhasil dikirim!'),
+              backgroundColor: Colors.green,
+            ),
           );
         }
       } else {
         throw Exception("Gagal mendapatkan data gambar");
       }
     } catch (e) {
-      if (mounted) Navigator.pop(context);
-      debugPrint("🚨 Reprint Error: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Gagal cetak ulang: $e'), backgroundColor: Colors.red),
+      if (pageContext.mounted) Navigator.pop(pageContext);
+      debugPrint("Reprint Error: $e");
+      if (pageContext.mounted) {
+        ScaffoldMessenger.of(pageContext).showSnackBar(
+          SnackBar(
+            content: Text('Gagal cetak ulang: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
-  // ================================================================
-  // TEST PRINT
+  // ================================================================`r`n  // TEST PRINT
   // ================================================================
   Future<void> _testPrint(_PrinterInfo printer) async {
     showDialog(
@@ -560,13 +572,13 @@ class _DiagnosticPageState extends State<DiagnosticPage>
   Future<Uint8List> _generateTestPage() async {
     // Using pdf package to generate a simple test page
     // Import is already available from printing package
-    final pdf = await rootBundle_workaround();
+    final pdf = await rootBundleWorkaround();
     return pdf;
   }
 
   /// Simple PDF test page without importing pdf package directly here
   /// (it's already a transitive dependency via printing)
-  Future<Uint8List> rootBundle_workaround() async {
+  Future<Uint8List> rootBundleWorkaround() async {
     // Generate a minimal valid PDF manually
     // This is a minimal PDF that prints "PHOTOBOOTH TEST PAGE"
     const content = '''%PDF-1.4
@@ -641,78 +653,239 @@ startxref
             errorBuilder: (_, __, ___) => Container(color: Colors.black),
           ),
           // Overlay gelap
-          Container(color: Colors.black.withOpacity(0.4)),
+          Container(color: Colors.black.withValues(alpha: 0.4)),
           // Konten
           FadeTransition(
             opacity: _fadeAnimation,
             child: Row(
               children: [
-            // ── LEFT PANEL: Checks ──
-            Expanded(
-              flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.all(40),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Row(
+                // ── LEFT PANEL: Checks ──
+                Expanded(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.black,
-                              width: 3,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black,
-                                offset: Offset(4, 4),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.monitor_heart,
-                            color: Colors.black,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        // Header
+                        Row(
                           children: [
-                            const Text(
-                              'System Diagnostic',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
                                 color: Colors.white,
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.0,
-                                shadows: [
-                                  Shadow(
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.black,
+                                  width: 3,
+                                ),
+                                boxShadow: const [
+                                  BoxShadow(
                                     color: Colors.black,
-                                    offset: Offset(3, 3),
+                                    offset: Offset(4, 4),
                                   ),
                                 ],
                               ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(8),
+                              child: const Icon(
+                                Icons.monitor_heart,
+                                color: Colors.black,
+                                size: 28,
                               ),
-                              child: SelectableText(
-                                'HWID: ${_hwid.isNotEmpty ? _hwid : 'detecting...'}',
-                                style: const TextStyle(
-                                  fontFamily: 'Poppins',
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                            ),
+                            const SizedBox(width: 20),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'System Diagnostic',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    color: Colors.white,
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                    shadows: [
+                                      Shadow(
+                                        color: Colors.black,
+                                        offset: Offset(3, 3),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: SelectableText(
+                                    'HWID: ${_hwid.isNotEmpty ? _hwid : 'detecting...'}',
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins',
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 36),
+
+                        // ── Check cards ──
+                        Expanded(
+                          child: ListView(
+                            children: [
+                              // 1. Server
+                              _buildCheckCard(
+                                icon: Icons.dns_outlined,
+                                title: 'Server Connection',
+                                message: _serverMessage,
+                                status: _serverStatus,
+                                accentColor: const Color(0xFF6C63FF),
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              // 2. Camera
+                              _buildCheckCard(
+                                icon: Icons.camera_alt_outlined,
+                                title: 'Camera Driver',
+                                message: _cameraMessage,
+                                status: _cameraStatus,
+                                accentColor: const Color(0xFF00BFA5),
+                                trailing: _cameraStatus == _CheckStatus.success
+                                    ? Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF00BFA5)
+                                              .withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          Platform.isMacOS
+                                              ? 'macOS'
+                                              : 'Windows',
+                                          style: const TextStyle(
+                                            color: Color(0xFF00BFA5),
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      )
+                                    : null,
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              // 3. Printer
+                              _buildCheckCard(
+                                icon: Icons.print_outlined,
+                                title: 'Printer Driver',
+                                message: _printerMessage,
+                                status: _printerStatus,
+                                accentColor: const Color(0xFFFF6B6B),
+                                expandedContent: _printers.isNotEmpty
+                                    ? Column(
+                                        children: _printers.map((p) {
+                                          return _buildPrinterRow(p);
+                                        }).toList(),
+                                      )
+                                    : null,
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              // 4. Recent Photos
+                              _buildCheckCard(
+                                icon: Icons.photo_library_outlined,
+                                title: 'Recent Photos',
+                                message: _photosMessage,
+                                status: _photosStatus,
+                                accentColor: const Color(0xFFFFB74D),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ── Bottom buttons ──
+                        Row(
+                          children: [
+                            // Refresh
+                            _buildActionButton(
+                              icon: Icons.refresh,
+                              label: 'Re-check',
+                              onTap: () {
+                                setState(() {
+                                  _cameraStatus = _CheckStatus.loading;
+                                  _printerStatus = _CheckStatus.loading;
+                                  _serverStatus = _CheckStatus.loading;
+                                  _photosStatus = _CheckStatus.loading;
+                                  _cameraMessage = 'Mendeteksi kamera...';
+                                  _printerMessage = 'Mendeteksi printer...';
+                                  _serverMessage = 'Mengecek koneksi server...';
+                                  _photosMessage = 'Mengambil foto terakhir...';
+                                  _printers = [];
+                                  _historyItems = [];
+                                });
+                                _runAllChecks();
+                              },
+                              color: Colors.white,
+                              textColor: Colors.black,
+                            ),
+
+                            const SizedBox(width: 12),
+
+                            // Continue
+                            Expanded(
+                              child: AnimatedBuilder(
+                                animation: _pulseController,
+                                builder: (context, child) {
+                                  final glow = _allPassed && _allDone
+                                      ? _pulseController.value * 0.3
+                                      : 0.0;
+                                  return Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: _allPassed && _allDone
+                                          ? [
+                                              BoxShadow(
+                                                color: const Color(0xFF00BFA5)
+                                                    .withValues(alpha: glow),
+                                                blurRadius: 20,
+                                                spreadRadius: 2,
+                                              )
+                                            ]
+                                          : [],
+                                    ),
+                                    child: child,
+                                  );
+                                },
+                                child: _buildActionButton(
+                                  icon: Icons.arrow_forward_rounded,
+                                  label: _allDone
+                                      ? (_allPassed
+                                          ? 'Lanjutkan'
+                                          : 'Lanjutkan Anyway')
+                                      : 'Checking...',
+                                  onTap: _allDone ? _proceedToApp : null,
+                                  color: _allDone
+                                      ? (_allPassed
+                                          ? const Color(0xFF00BFA5) // Teal
+                                          : const Color(0xFFFF9800)) // Orange
+                                      : Colors.grey[300]!,
+                                  textColor:
+                                      _allDone ? Colors.white : Colors.black38,
                                 ),
                               ),
                             ),
@@ -720,254 +893,98 @@ startxref
                         ),
                       ],
                     ),
-
-                    const SizedBox(height: 36),
-
-                    // ── Check cards ──
-                    Expanded(
-                      child: ListView(
-                        children: [
-                          // 1. Server
-                          _buildCheckCard(
-                            icon: Icons.dns_outlined,
-                            title: 'Server Connection',
-                            message: _serverMessage,
-                            status: _serverStatus,
-                            accentColor: const Color(0xFF6C63FF),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // 2. Camera
-                          _buildCheckCard(
-                            icon: Icons.camera_alt_outlined,
-                            title: 'Camera Driver',
-                            message: _cameraMessage,
-                            status: _cameraStatus,
-                            accentColor: const Color(0xFF00BFA5),
-                            trailing: _cameraStatus == _CheckStatus.success
-                                ? Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF00BFA5)
-                                          .withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      Platform.isMacOS ? 'macOS' : 'Windows',
-                                      style: const TextStyle(
-                                        color: Color(0xFF00BFA5),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  )
-                                : null,
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // 3. Printer
-                          _buildCheckCard(
-                            icon: Icons.print_outlined,
-                            title: 'Printer Driver',
-                            message: _printerMessage,
-                            status: _printerStatus,
-                            accentColor: const Color(0xFFFF6B6B),
-                            expandedContent: _printers.isNotEmpty
-                                ? Column(
-                                    children: _printers.map((p) {
-                                      return _buildPrinterRow(p);
-                                    }).toList(),
-                                  )
-                                : null,
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // 4. Recent Photos
-                          _buildCheckCard(
-                            icon: Icons.photo_library_outlined,
-                            title: 'Recent Photos',
-                            message: _photosMessage,
-                            status: _photosStatus,
-                            accentColor: const Color(0xFFFFB74D),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // ── Bottom buttons ──
-                    Row(
-                      children: [
-                        // Refresh
-                        _buildActionButton(
-                          icon: Icons.refresh,
-                          label: 'Re-check',
-                          onTap: () {
-                            setState(() {
-                              _cameraStatus = _CheckStatus.loading;
-                              _printerStatus = _CheckStatus.loading;
-                              _serverStatus = _CheckStatus.loading;
-                              _photosStatus = _CheckStatus.loading;
-                              _cameraMessage = 'Mendeteksi kamera...';
-                              _printerMessage = 'Mendeteksi printer...';
-                              _serverMessage = 'Mengecek koneksi server...';
-                              _photosMessage = 'Mengambil foto terakhir...';
-                              _printers = [];
-                              _historyItems = [];
-                            });
-                            _runAllChecks();
-                          },
-                          color: Colors.white,
-                          textColor: Colors.black,
-                        ),
-
-                        const SizedBox(width: 12),
-
-                        // Continue
-                        Expanded(
-                          child: AnimatedBuilder(
-                            animation: _pulseController,
-                            builder: (context, child) {
-                              final glow = _allPassed && _allDone
-                                  ? _pulseController.value * 0.3
-                                  : 0.0;
-                              return Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: _allPassed && _allDone
-                                      ? [
-                                          BoxShadow(
-                                            color: const Color(0xFF00BFA5)
-                                                .withOpacity(glow),
-                                            blurRadius: 20,
-                                            spreadRadius: 2,
-                                          )
-                                        ]
-                                      : [],
-                                ),
-                                child: child,
-                              );
-                            },
-                            child: _buildActionButton(
-                              icon: Icons.arrow_forward_rounded,
-                              label: _allDone
-                                  ? (_allPassed
-                                      ? 'Lanjutkan'
-                                      : 'Lanjutkan Anyway')
-                                  : 'Checking...',
-                              onTap: _allDone ? _proceedToApp : null,
-                              color: _allDone
-                                  ? (_allPassed
-                                      ? const Color(0xFF00BFA5) // Teal
-                                      : const Color(0xFFFF9800)) // Orange
-                                  : Colors.grey[300]!,
-                              textColor:
-                                  _allDone ? Colors.white : Colors.black38,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // ── RIGHT PANEL: Recent photos grid ──
-            Container(
-              width: 360,
-              margin: const EdgeInsets.all(20),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.black,
-                  width: 4,
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black,
-                    offset: Offset(6, 6),
                   ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.history,
-                        color: Colors.black87,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Riwayat Strip (Owner Only)',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          color: Colors.black87,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                ),
+
+                // ── RIGHT PANEL: Recent photos grid ──
+                Container(
+                  width: 360,
+                  margin: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.black,
+                      width: 4,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black,
+                        offset: Offset(6, 6),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: _photosStatus == _CheckStatus.loading
-                        ? const Center(
-                            child: CircularProgressIndicator(
-                              color: Colors.black45,
-                              strokeWidth: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.history,
+                            color: Colors.black87,
+                            size: 16,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Riwayat Strip (Owner Only)',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              color: Colors.black87,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
-                          )
-                        : _historyItems.isEmpty
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: _photosStatus == _CheckStatus.loading
                             ? const Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.photo_library_outlined,
-                                      color: Colors.black26,
-                                      size: 48,
-                                    ),
-                                    SizedBox(height: 12),
-                                    Text(
-                                      'Belum ada riwayat',
-                                      style: TextStyle(
-                                        color: Colors.black54,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
+                                child: CircularProgressIndicator(
+                                  color: Colors.black45,
+                                  strokeWidth: 3,
                                 ),
                               )
-                            : ListView.separated(
-                                padding: const EdgeInsets.only(bottom: 20),
-                                itemCount: _historyItems.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 16),
-                                itemBuilder: (ctx, i) {
-                                  final item = _historyItems[i];
-                                  return _buildHistoryCard(item, i);
-                                },
-                              ),
+                            : _historyItems.isEmpty
+                                ? const Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.photo_library_outlined,
+                                          color: Colors.black26,
+                                          size: 48,
+                                        ),
+                                        SizedBox(height: 12),
+                                        Text(
+                                          'Belum ada riwayat',
+                                          style: TextStyle(
+                                            color: Colors.black54,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    padding: const EdgeInsets.only(bottom: 20),
+                                    itemCount: _historyItems.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 16),
+                                    itemBuilder: (ctx, i) {
+                                      final item = _historyItems[i];
+                                      return _buildHistoryCard(item, i);
+                                    },
+                                  ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
         ],
       ),
     );
@@ -1030,7 +1047,7 @@ startxref
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.1),
+                  color: accentColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: accentColor, size: 18),
@@ -1044,7 +1061,9 @@ startxref
                       title,
                       style: TextStyle(
                         fontFamily: 'Poppins',
-                        color: status == _CheckStatus.loading ? Colors.white : Colors.black,
+                        color: status == _CheckStatus.loading
+                            ? Colors.white
+                            : Colors.black,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1054,7 +1073,9 @@ startxref
                       message,
                       style: TextStyle(
                         fontFamily: 'Poppins',
-                        color: status == _CheckStatus.loading ? Colors.white70 : Colors.black87,
+                        color: status == _CheckStatus.loading
+                            ? Colors.white70
+                            : Colors.black87,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
@@ -1075,7 +1096,7 @@ startxref
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: accentColor.withOpacity(0.5),
+                        color: accentColor.withValues(alpha: 0.5),
                       ),
                     )
                   : Icon(statusIcon, color: statusColor, size: 20),
@@ -1114,9 +1135,7 @@ startxref
               printer.name,
               style: TextStyle(
                 fontFamily: 'Poppins',
-                color: printer.isAvailable
-                    ? Colors.black87
-                    : Colors.black38,
+                color: printer.isAvailable ? Colors.black87 : Colors.black38,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -1147,10 +1166,10 @@ startxref
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF6B6B).withOpacity(0.1),
+                  color: const Color(0xFFFF6B6B).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: const Color(0xFFFF6B6B).withOpacity(0.2),
+                    color: const Color(0xFFFF6B6B).withValues(alpha: 0.2),
                   ),
                 ),
                 child: const Text(
@@ -1175,9 +1194,7 @@ startxref
         color: Colors.grey[100],
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.black, width: 2.5),
-        boxShadow: const [
-          BoxShadow(color: Colors.black, offset: Offset(4, 4))
-        ],
+        boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(4, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1197,12 +1214,15 @@ startxref
                       item.url,
                       fit: BoxFit.cover,
                       alignment: Alignment.topCenter,
-                      loadingBuilder: (_, child, prog) => prog == null ? child : const Center(child: CircularProgressIndicator()),
-                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 40),
+                      loadingBuilder: (_, child, prog) => prog == null
+                          ? child
+                          : const Center(child: CircularProgressIndicator()),
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.broken_image, size: 40),
                     ),
             ),
           ),
-          
+
           // Info & Action
           Padding(
             padding: const EdgeInsets.all(12),
@@ -1222,19 +1242,23 @@ startxref
                     ),
                     Text(
                       _formatDate(item.createdAt),
-                      style: const TextStyle(fontSize: 9, color: Colors.black54),
+                      style:
+                          const TextStyle(fontSize: 9, color: Colors.black54),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'ID: ${item.sessionCode}',
-                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 12),
-                
+
                 // Reprint Button
                 GestureDetector(
                   onTap: () => _reprintStrip(item),
@@ -1252,7 +1276,10 @@ startxref
                         SizedBox(width: 8),
                         Text(
                           'CETAK ULANG',
-                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),

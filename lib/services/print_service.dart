@@ -10,14 +10,15 @@ class PrintService {
   PrintService._internal();
 
   /// Logika cetak standar untuk Photobooth (4R / 4x6 inch)
-  Future<bool> printStrip(BuildContext context, Uint8List imageBytes, {String sessionUuid = 'history', int copies = 1}) async {
+  Future<bool> printStrip(BuildContext context, Uint8List imageBytes,
+      {String sessionUuid = 'history', int copies = 1}) async {
     bool printSuccess = false;
 
     try {
       // Standar 4R (4x6 inch) dlm points (72 points per inch)
       const double width4R = 4.0 * 72.0;
       const double height4R = 6.0 * 72.0;
-      final pdfFormat = PdfPageFormat(width4R, height4R, marginAll: 0);
+      const pdfFormat = PdfPageFormat(width4R, height4R, marginAll: 0);
 
       Future<Uint8List> generateDoc(PdfPageFormat format) async {
         final doc = pw.Document();
@@ -57,7 +58,9 @@ class PrintService {
           );
           if (res) printSuccess = true;
           // Beri sedikit jeda antar spool jika perlu (opsional)
-          if (copies > 1) await Future.delayed(const Duration(milliseconds: 500));
+          if (copies > 1) {
+            await Future.delayed(const Duration(milliseconds: 500));
+          }
         }
       }
     } catch (e) {
@@ -72,7 +75,8 @@ class PrintService {
             final doc = pw.Document();
             final image = pw.MemoryImage(imageBytes);
             doc.addPage(pw.Page(
-              pageFormat: PdfPageFormat(4.0 * 72.0, 6.0 * 72.0, marginAll: 0),
+              pageFormat:
+                  const PdfPageFormat(4.0 * 72.0, 6.0 * 72.0, marginAll: 0),
               build: (_) => pw.FullPage(
                 ignoreMargins: true,
                 child: pw.Image(image, fit: pw.BoxFit.cover, dpi: 300),

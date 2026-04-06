@@ -1,3 +1,4 @@
+import 'package:photobooth_app/services/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
@@ -53,7 +54,7 @@ class _SplashScreenState extends State<SplashScreen> {
       _hwid = hwid;
     });
 
-    print("🔑 HWID DETECTED: $hwid");
+    AppLogger.debug("🔑 HWID DETECTED: $hwid");
 
     await Future.delayed(const Duration(seconds: 2));
 
@@ -126,7 +127,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
-                        color: Colors.black.withOpacity(0.7),
+                        color: Colors.black.withValues(alpha: 0.7),
                         child: Text(
                           _errorMessage,
                           style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
@@ -167,9 +168,9 @@ class _SplashScreenState extends State<SplashScreen> {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.85),
+                  color: Colors.black.withValues(alpha: 0.85),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.yellow.withOpacity(0.5), width: 1),
+                  border: Border.all(color: Colors.yellow.withValues(alpha: 0.5), width: 1),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,7 +216,7 @@ class _SplashScreenState extends State<SplashScreen> {
                             duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
-                              color: _hwidCopied ? Colors.green.withOpacity(0.3) : Colors.white.withOpacity(0.1),
+                              color: _hwidCopied ? Colors.green.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
                                 color: _hwidCopied ? Colors.greenAccent : Colors.white24,
@@ -244,10 +245,10 @@ class _SplashScreenState extends State<SplashScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: _isLoading
-                                ? Colors.orange.withOpacity(0.2)
+                                ? Colors.orange.withValues(alpha: 0.2)
                                 : _isLicenseValid
-                                    ? Colors.green.withOpacity(0.2)
-                                    : Colors.red.withOpacity(0.2),
+                                    ? Colors.green.withValues(alpha: 0.2)
+                                    : Colors.red.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -311,7 +312,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         }
                       },
                       style: IconButton.styleFrom(
-                        backgroundColor: Colors.red.withOpacity(0.8),
+                        backgroundColor: Colors.red.withValues(alpha: 0.8),
                         hoverColor: Colors.red,
                       ),
                     ),
@@ -364,7 +365,7 @@ class OutlinedText extends StatelessWidget {
               style: TextStyle(
                 fontFamily: fontFamily, fontSize: fontSize,
                 fontWeight: fontWeight, letterSpacing: letterSpacing,
-                height: 1.2, color: Colors.black.withOpacity(0.6),
+                height: 1.2, color: Colors.black.withValues(alpha: 0.6),
               ),
             ),
           ),
@@ -439,3 +440,5 @@ class _RetroButtonState extends State<RetroButton> {
     );
   }
 }
+
+

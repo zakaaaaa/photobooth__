@@ -45,7 +45,9 @@ class FrameSelectionPage extends StatelessWidget {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => StaticFrameTemplatePage()),
+                      MaterialPageRoute(
+                          builder: (context) =>
+                              const StaticFrameTemplatePage()),
                     );
                   },
                 ),
@@ -56,13 +58,15 @@ class FrameSelectionPage extends StatelessWidget {
                 ImageButton(
                   text: "DIY Frame",
                   onTap: () {
-                    Provider.of<PhotoProvider>(context, listen: false).setFrameMode(
+                    Provider.of<PhotoProvider>(context, listen: false)
+                        .setFrameMode(
                       FrameMode.custom,
                       photoCount: 3,
                     );
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const CameraPage()),
+                      MaterialPageRoute(
+                          builder: (context) => const CameraPage()),
                     );
                   },
                 ),
@@ -168,13 +172,17 @@ class OutlinedText extends StatelessWidget {
       children: [
         if (hasShadow)
           Positioned(
-            top: 4, left: 4,
+            top: 4,
+            left: 4,
             child: Text(
               text,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight,
-                letterSpacing: letterSpacing, height: 1.2,
+                fontFamily: fontFamily,
+                fontSize: fontSize,
+                fontWeight: fontWeight,
+                letterSpacing: letterSpacing,
+                height: 1.2,
                 color: Colors.black.withValues(alpha: 0.6),
               ),
             ),
@@ -183,17 +191,26 @@ class OutlinedText extends StatelessWidget {
           text,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight,
-            letterSpacing: letterSpacing, height: 1.2,
-            foreground: Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = outlineColor,
+            fontFamily: fontFamily,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            letterSpacing: letterSpacing,
+            height: 1.2,
+            foreground: Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 8
+              ..color = outlineColor,
           ),
         ),
         Text(
           text,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontFamily: fontFamily, fontSize: fontSize, fontWeight: fontWeight,
-            letterSpacing: letterSpacing, height: 1.2,
+            fontFamily: fontFamily,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            letterSpacing: letterSpacing,
+            height: 1.2,
             color: textColor,
           ),
         ),

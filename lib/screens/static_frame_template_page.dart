@@ -170,7 +170,7 @@ class _StaticFrameTemplatePageState extends State<StaticFrameTemplatePage> {
         fit: StackFit.expand,
         children: [
           Image.asset('assets/images/bg.png', fit: BoxFit.cover),
-          Container(color: Colors.black.withOpacity(0.5)),
+          Container(color: Colors.black.withValues(alpha: 0.5)),
 
           Column(
             children: [
@@ -312,7 +312,7 @@ class _RetroFrameCardState extends State<RetroFrameCard> {
           angle: slot.rotation * (3.14159265 / 180),
           child: Container(
             decoration: BoxDecoration(
-              color: color.withOpacity(0.75),
+              color: color.withValues(alpha: 0.75),
               border: Border.all(color: color, width: 1.5),
             ),
             child: Center(
@@ -402,7 +402,7 @@ class _RetroFrameCardState extends State<RetroFrameCard> {
               border: Border.all(width: 3, color: Colors.black),
               boxShadow: _isPressed
                   ? []
-                  : [BoxShadow(color: Colors.black.withOpacity(0.6), offset: const Offset(6, 6))],
+                  : [BoxShadow(color: Colors.black.withValues(alpha: 0.6), offset: const Offset(6, 6))],
             ),
             child: Column(
               children: [
@@ -439,7 +439,7 @@ class _RetroFrameCardState extends State<RetroFrameCard> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                           decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.3),
+                            color: Colors.green.withValues(alpha: 0.3),
                             borderRadius: BorderRadius.circular(3),
                           ),
                           child: Text(
@@ -550,7 +550,7 @@ class OutlinedText extends StatelessWidget {
           textAlign: TextAlign.center,
           style: TextStyle(fontFamily: fontFamily, fontSize: fontSize,
             fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,
-            color: Colors.black.withOpacity(0.6)))),
+            color: Colors.black.withValues(alpha: 0.6)))),
         Text(text, textAlign: TextAlign.center,
           style: TextStyle(fontFamily: fontFamily, fontSize: fontSize,
             fontWeight: fontWeight, letterSpacing: letterSpacing, height: 1.2,

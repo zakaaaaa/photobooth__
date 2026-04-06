@@ -35,13 +35,12 @@ class ImageFilterUtil {
         break;
       case PhotoFilter.smooth:
         // PERBAIKAN: Gunakan sharpen tipis setelah blur agar tidak terlihat pecah/buram
-        filteredImage = img.gaussianBlur(selfieImage, radius: 1); 
+        filteredImage = img.gaussianBlur(selfieImage, radius: 1);
         break;
       case PhotoFilter.brightness:
         filteredImage = img.adjustColor(selfieImage, brightness: 1.15);
         break;
       case PhotoFilter.none:
-      default:
         filteredImage = selfieImage;
     }
 

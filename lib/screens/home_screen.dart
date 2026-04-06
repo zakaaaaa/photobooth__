@@ -19,7 +19,7 @@ class HomeScreen extends StatelessWidget {
 
           // 2. OVERLAY GELAP (Supaya teks terbaca jelas)
           Container(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
           ),
 
           // 3. KONTEN TENGAH
@@ -45,9 +45,9 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 10),
-                
+
                 const Text(
                   "Abadikan Momen Serumu Disini!",
                   style: TextStyle(
@@ -66,7 +66,7 @@ class HomeScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => StaticFrameTemplatePage(),
+                        builder: (context) => const StaticFrameTemplatePage(),
                       ),
                     );
                   },
@@ -74,9 +74,7 @@ class HomeScreen extends StatelessWidget {
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 50, 
-                      vertical: 20
-                    ),
+                        horizontal: 50, vertical: 20),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
                     ),

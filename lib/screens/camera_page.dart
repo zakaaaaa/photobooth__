@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show compute, consolidateHttpClientResponseBytes;
+import 'package:flutter/foundation.dart'
+    show compute, consolidateHttpClientResponseBytes;
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
@@ -22,12 +23,14 @@ import '../services/digicam_camera_service.dart';
 // TOP-LEVEL ISOLATE FUNCTION — encode PNG di background thread
 // ================================================================
 Uint8List _encodePngInIsolate(Map<String, dynamic> args) {
-  final int width     = args['width']  as int;
-  final int height    = args['height'] as int;
-  final Uint8List raw = args['raw']    as Uint8List;
+  final int width = args['width'] as int;
+  final int height = args['height'] as int;
+  final Uint8List raw = args['raw'] as Uint8List;
   final image = img.Image.fromBytes(
-    width: width, height: height,
-    bytes: raw.buffer, order: img.ChannelOrder.rgba,
+    width: width,
+    height: height,
+    bytes: raw.buffer,
+    order: img.ChannelOrder.rgba,
   );
   return Uint8List.fromList(img.encodePng(image));
 }
@@ -43,20 +46,20 @@ class _CameraPageState extends State<CameraPage> {
   CameraController? _cameraController;
   List<CameraDescription> _cameras = [];
   bool _isCameraInitialized = false;
-  String _debugMessage      = "Mendeteksi kamera...";
+  String _debugMessage = "Mendeteksi kamera...";
 
   bool _isSessionActive = false;
-  bool _isCapturing     = false;
-  int  _countdown       = 0;
-  bool _showBlink       = false;
+  bool _isCapturing = false;
+  int _countdown = 0;
+  bool _showBlink = false;
   bool _isWaitingForManualStart = false;
-  int  _retakeCount     = 0;
-  bool _isDSLRProcessing = false;
+  int _retakeCount = 0;
+  final bool _isDSLRProcessing = false;
 
   final DigiCamCameraService _dslrService = DigiCamCameraService();
 
   bool _isRendering = false;
-  bool _renderDone  = false;
+  bool _renderDone = false;
 
   // ── FIX FILTER: simpan filter yang dipilih sebelum sesi dimulai ──
   PhotoFilter _lockedFilter = PhotoFilter.none;
@@ -65,36 +68,100 @@ class _CameraPageState extends State<CameraPage> {
 
   // ── Filter matrices ──
   static const ColorFilter _sepiaMatrix = ColorFilter.matrix(<double>[
-    0.393, 0.769, 0.189, 0, 0,
-    0.349, 0.686, 0.168, 0, 0,
-    0.272, 0.534, 0.131, 0, 0,
-    0,     0,     0,     1, 0,
+    0.393,
+    0.769,
+    0.189,
+    0,
+    0,
+    0.349,
+    0.686,
+    0.168,
+    0,
+    0,
+    0.272,
+    0.534,
+    0.131,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
   ]);
   static const ColorFilter _grayscaleMatrix = ColorFilter.matrix(<double>[
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0,      0,      0,      1, 0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
   ]);
   static const ColorFilter _brightnessMatrix = ColorFilter.matrix(<double>[
-    1, 0, 0, 0, 30,
-    0, 1, 0, 0, 30,
-    0, 0, 1, 0, 30,
-    0, 0, 0, 1,  0,
+    1,
+    0,
+    0,
+    0,
+    30,
+    0,
+    1,
+    0,
+    0,
+    30,
+    0,
+    0,
+    1,
+    0,
+    30,
+    0,
+    0,
+    0,
+    1,
+    0,
   ]);
   // ── FIX: smooth filter matrix (soft blur effect) ──
   static const ColorFilter _smoothMatrix = ColorFilter.matrix(<double>[
-    1.0,  0,    0,    0, 10,
-    0,    1.0,  0,    0, 10,
-    0,    0,    1.0,  0, 10,
-    0,    0,    0,    1,  0,
+    1.0,
+    0,
+    0,
+    0,
+    10,
+    0,
+    1.0,
+    0,
+    0,
+    10,
+    0,
+    0,
+    1.0,
+    0,
+    10,
+    0,
+    0,
+    0,
+    1,
+    0,
   ]);
 
   final Map<PhotoFilter, String> _filterAssets = {
-    PhotoFilter.none:       'assets/filters/filter_none.png',
-    PhotoFilter.vintage:    'assets/filters/filter_vintage.png',
-    PhotoFilter.grayscale:  'assets/filters/filter_grayscale.png',
-    PhotoFilter.smooth:     'assets/filters/filter_smooth.png',
+    PhotoFilter.none: 'assets/filters/filter_none.png',
+    PhotoFilter.vintage: 'assets/filters/filter_vintage.png',
+    PhotoFilter.grayscale: 'assets/filters/filter_grayscale.png',
+    PhotoFilter.smooth: 'assets/filters/filter_smooth.png',
     PhotoFilter.brightness: 'assets/filters/filter_brightness.png',
   };
 
@@ -130,21 +197,21 @@ class _CameraPageState extends State<CameraPage> {
         if (mounted) setState(() => _debugMessage = "Kamera tidak ditemukan");
         return;
       }
-      
+
       final camera = _cameras.firstWhere(
         (c) => c.lensDirection == CameraLensDirection.front,
         orElse: () => _cameras.first,
       );
-      
+
       _cameraController = CameraController(
         camera,
         ResolutionPreset.max,
         enableAudio: false,
       );
-      
+
       await _cameraController!.initialize();
       if (!mounted) return;
-      
+
       setState(() {
         _isCameraInitialized = true;
         _debugMessage = "";
@@ -161,11 +228,16 @@ class _CameraPageState extends State<CameraPage> {
     // Gunakan _lockedFilter jika sesi sudah dimulai supaya tidak reset
     final active = _isSessionActive ? _lockedFilter : filter;
     switch (active) {
-      case PhotoFilter.vintage:    return _sepiaMatrix;
-      case PhotoFilter.grayscale:  return _grayscaleMatrix;
-      case PhotoFilter.brightness: return _brightnessMatrix;
-      case PhotoFilter.smooth:     return _smoothMatrix; // ← FIX: smooth tidak lagi jatuh ke default
-      default: return const ColorFilter.mode(Colors.transparent, BlendMode.dst);
+      case PhotoFilter.vintage:
+        return _sepiaMatrix;
+      case PhotoFilter.grayscale:
+        return _grayscaleMatrix;
+      case PhotoFilter.brightness:
+        return _brightnessMatrix;
+      case PhotoFilter.smooth:
+        return _smoothMatrix; // ← FIX: smooth tidak lagi jatuh ke default
+      default:
+        return const ColorFilter.mode(Colors.transparent, BlendMode.dst);
     }
   }
 
@@ -175,8 +247,8 @@ class _CameraPageState extends State<CameraPage> {
   void _initializeSession() async {
     if (_isSessionActive) return;
 
-    final provider  = Provider.of<PhotoProvider>(context, listen: false);
-    
+    final provider = Provider.of<PhotoProvider>(context, listen: false);
+
     // ── FIX: Lock filter sebelum clearPhotos() ──
     _lockedFilter = provider.selectedFilter;
     debugPrint("🎨 Filter dikunci: $_lockedFilter");
@@ -185,8 +257,8 @@ class _CameraPageState extends State<CameraPage> {
     setState(() {
       _isSessionActive = true;
       _isWaitingForManualStart = true;
-      _retakeCount     = 0;
-      _renderDone      = false;
+      _retakeCount = 0;
+      _renderDone = false;
     });
   }
 
@@ -199,6 +271,7 @@ class _CameraPageState extends State<CameraPage> {
 
     await _performSingleCapture();
 
+    if (!mounted) return;
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     final int total = provider.targetPhotoCount;
 
@@ -228,13 +301,14 @@ class _CameraPageState extends State<CameraPage> {
     setState(() {
       _retakeCount++;
       _isSessionActive = true;
-      _renderDone      = false;
+      _renderDone = false;
     });
 
     await _performSingleCapture();
 
     if (mounted) setState(() => _isSessionActive = false);
 
+    if (!mounted) return;
     final prov = Provider.of<PhotoProvider>(context, listen: false);
     if (mounted && prov.isComplete) {
       _triggerBackgroundRender();
@@ -265,39 +339,47 @@ class _CameraPageState extends State<CameraPage> {
   // AMBIL FOTO
   // ================================================================
   Future<void> _takePictureAndSave() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
     try {
       Uint8List? raw;
-      
+
       // 1. Ambil dari Webcam sebagai Utama (Prioritas Kecepatan & Kualitas 1080p)
-      debugPrint("📸 Menggunakan Webcam untuk capture (High Quality Priority)...");
+      debugPrint(
+          "📸 Menggunakan Webcam untuk capture (High Quality Priority)...");
       final XFile result = await _cameraController!.takePicture();
       raw = await result.readAsBytes();
 
-      // 2. Info: DSLR tetap bisa di-trigger jika dibutuhkan di masa depan, 
+      // 2. Info: DSLR tetap bisa di-trigger jika dibutuhkan di masa depan,
       // tapi untuk sekarang kita fokus ke kecepatan webcam 1080p.
-      
+
       if (!mounted) return;
       final Uint8List imageBytes = raw;
 
       final provider = Provider.of<PhotoProvider>(context, listen: false);
 
       // ── FIX: Gunakan _lockedFilter (bukan provider.selectedFilter yang bisa berubah) ──
-      final Uint8List filtered = await ImageFilterUtil.applyFilter(imageBytes, _lockedFilter);
+      final Uint8List filtered =
+          await ImageFilterUtil.applyFilter(imageBytes, _lockedFilter);
 
       final int photoIndex = provider.photos.length;
       await _savePhotoLocally(filtered, photoIndex, provider.sessionUuid);
-      _uploadPhotoToServer(filtered, photoIndex, provider.sessionUuid); // fire & forget
+      _uploadPhotoToServer(
+          filtered, photoIndex, provider.sessionUuid); // fire & forget
       provider.addPhoto(filtered);
     } catch (e) {
       debugPrint('❌ Error capture: $e');
     }
   }
 
-  Future<void> _savePhotoLocally(Uint8List bytes, int index, String sessionId) async {
+  Future<void> _savePhotoLocally(
+      Uint8List bytes, int index, String sessionId) async {
     try {
-      final id         = sessionId.isNotEmpty ? sessionId : "session_${DateTime.now().millisecondsSinceEpoch}";
-      final dir        = await getApplicationDocumentsDirectory();
+      final id = sessionId.isNotEmpty
+          ? sessionId
+          : "session_${DateTime.now().millisecondsSinceEpoch}";
+      final dir = await getApplicationDocumentsDirectory();
       final sessionDir = Directory('${dir.path}/Photobooth/$id');
       if (!await sessionDir.exists()) await sessionDir.create(recursive: true);
       final file = File('${sessionDir.path}/photo_$index.jpg');
@@ -308,26 +390,29 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
-  Future<void> _uploadPhotoToServer(Uint8List bytes, int index, String sessionUuid) async {
+  Future<void> _uploadPhotoToServer(
+      Uint8List bytes, int index, String sessionUuid) async {
     try {
       if (sessionUuid.isEmpty) return;
       debugPrint("☁️ Upload foto ${index + 1} ke server...");
 
-      final tempDir  = await getTemporaryDirectory();
-      final tempFile = File('${tempDir.path}/photo_${index}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(
+          '${tempDir.path}/photo_${index}_${DateTime.now().millisecondsSinceEpoch}.jpg');
       await tempFile.writeAsBytes(bytes);
 
-      final uri     = Uri.parse('$_backendUrl/api/photobooth/upload');
+      final uri = Uri.parse('$_backendUrl/api/photobooth/upload');
       final request = http.MultipartRequest('POST', uri)
         ..fields['session_uuid'] = sessionUuid
-        ..files.add(await http.MultipartFile.fromPath(
-            'photo', tempFile.path,
+        ..files.add(await http.MultipartFile.fromPath('photo', tempFile.path,
             contentType: MediaType('image', 'jpeg')));
 
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
 
-      try { await tempFile.delete(); } catch (_) {}
+      try {
+        await tempFile.delete();
+      } catch (_) {}
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         debugPrint("✅ Foto ${index + 1} terupload!");
@@ -345,7 +430,12 @@ class _CameraPageState extends State<CameraPage> {
   // ================================================================
   void _triggerBackgroundRender() {
     debugPrint("🎬 Trigger background render...");
-    if (mounted) setState(() { _isRendering = true; _renderDone = false; });
+    if (mounted) {
+      setState(() {
+        _isRendering = true;
+        _renderDone = false;
+      });
+    }
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     // Tidak pakai await — jalan di background
     _renderAndUploadInBackground(provider);
@@ -356,12 +446,12 @@ class _CameraPageState extends State<CameraPage> {
       debugPrint("🖼️ Rendering frame result...");
 
       // Skala 2.5 memadai untuk cetak 4x6 inch di ~500 DPI (Sangat Tajam & Cepat)
-      const double scale = 2.5; 
-      final double w = provider.selectedFrameWidth  * scale;
+      const double scale = 2.5;
+      final double w = provider.selectedFrameWidth * scale;
       final double h = provider.selectedFrameHeight * scale;
 
       final recorder = ui.PictureRecorder();
-      final canvas   = Canvas(recorder, Rect.fromLTWH(0, 0, w, h));
+      final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, w, h));
 
       // Background putih
       canvas.drawRect(Rect.fromLTWH(0, 0, w, h), Paint()..color = Colors.white);
@@ -370,29 +460,32 @@ class _CameraPageState extends State<CameraPage> {
       // PATH A: Custom slots dari web editor
       // ──────────────────────────────────────────────────────────
       if (provider.hasCustomSlots) {
-        debugPrint("✅ Render dengan custom slots (${provider.photoSlots.length} slot, ${provider.photos.length} foto)");
+        debugPrint(
+            "✅ Render dengan custom slots (${provider.photoSlots.length} slot, ${provider.photos.length} foto)");
 
         // Pre-decode semua foto sekali
         final List<ui.Image> decodedPhotos = [];
         for (int pi = 0; pi < provider.photos.length; pi++) {
-          final codec = await ui.instantiateImageCodec(provider.photos[pi].imageData);
+          final codec =
+              await ui.instantiateImageCodec(provider.photos[pi].imageData);
           final frame = await codec.getNextFrame();
           decodedPhotos.add(frame.image);
         }
 
         for (int si = 0; si < provider.photoSlots.length; si++) {
-          final slot     = provider.photoSlots[si];
+          final slot = provider.photoSlots[si];
           final int pidx = slot.photoIndex.clamp(0, decodedPhotos.length - 1);
-          final image    = decodedPhotos[pidx];
+          final image = decodedPhotos[pidx];
 
-          debugPrint("  Slot ${si+1}: photoIndex=${slot.photoIndex} → foto ${pidx+1}, rot=${slot.rotation}°");
+          debugPrint(
+              "  Slot ${si + 1}: photoIndex=${slot.photoIndex} → foto ${pidx + 1}, rot=${slot.rotation}°");
 
-          final double dx = slot.x      * scale;
-          final double dy = slot.y      * scale;
-          final double dw = slot.width  * scale;
+          final double dx = slot.x * scale;
+          final double dy = slot.y * scale;
+          final double dw = slot.width * scale;
           final double dh = slot.height * scale;
 
-          final double srcRatio = image.width  / image.height.toDouble();
+          final double srcRatio = image.width / image.height.toDouble();
           final double dstRatio = dw / dh;
           double srcX = 0, srcY = 0;
           double srcW = image.width.toDouble();
@@ -425,40 +518,41 @@ class _CameraPageState extends State<CameraPage> {
           if (slot.rotation != 0) canvas.restore();
         }
 
-      // ──────────────────────────────────────────────────────────
-      // PATH B: Fallback FrameLayout (grid hardcoded)
-      // ──────────────────────────────────────────────────────────
+        // ──────────────────────────────────────────────────────────
+        // PATH B: Fallback FrameLayout (grid hardcoded)
+        // ──────────────────────────────────────────────────────────
       } else {
         debugPrint("⚠️ Render dengan layout fallback");
 
-        final layout   = provider.selectedLayout;
+        final layout = provider.selectedLayout;
         final int count = provider.targetPhotoCount;
-        final int cols  = count == 3 ? 1 : 2;
-        final int rows  = (count / cols).ceil();
+        final int cols = count == 3 ? 1 : 2;
+        final int rows = (count / cols).ceil();
 
-        final lTop    = layout.topPadding        * scale;
-        final lBottom = layout.bottomPadding     * scale;
-        final lLeft   = layout.leftPadding       * scale;
-        final lRight  = layout.rightPadding      * scale;
+        final lTop = layout.topPadding * scale;
+        final lBottom = layout.bottomPadding * scale;
+        final lLeft = layout.leftPadding * scale;
+        final lRight = layout.rightPadding * scale;
         final lHSpace = layout.horizontalSpacing * scale;
-        final lVSpace = layout.verticalSpacing   * scale;
+        final lVSpace = layout.verticalSpacing * scale;
 
         final double paddedW = w - lLeft - lRight;
-        final double paddedH = h - lTop  - lBottom;
-        final double cellW   = (paddedW - (cols - 1) * lHSpace) / cols;
-        final double cellH   = (paddedH - (rows - 1) * lVSpace) / rows;
+        final double paddedH = h - lTop - lBottom;
+        final double cellW = (paddedW - (cols - 1) * lHSpace) / cols;
+        final double cellH = (paddedH - (rows - 1) * lVSpace) / rows;
 
         for (int i = 0; i < provider.photos.length && i < count; i++) {
           final col = i % cols;
           final row = i ~/ cols;
-          final dx  = lLeft + col * (cellW + lHSpace);
-          final dy  = lTop  + row * (cellH + lVSpace);
+          final dx = lLeft + col * (cellW + lHSpace);
+          final dy = lTop + row * (cellH + lVSpace);
 
-          final codec = await ui.instantiateImageCodec(provider.photos[i].imageData);
+          final codec =
+              await ui.instantiateImageCodec(provider.photos[i].imageData);
           final frame = await codec.getNextFrame();
           final image = frame.image;
 
-          final double srcRatio = image.width  / image.height.toDouble();
+          final double srcRatio = image.width / image.height.toDouble();
           final double dstRatio = cellW / cellH;
           double srcX = 0, srcY = 0;
           double srcW = image.width.toDouble();
@@ -486,28 +580,27 @@ class _CameraPageState extends State<CameraPage> {
       // ──────────────────────────────────────────────────────────
       if (provider.selectedFrameAsset != null) {
         final frameUrl = provider.selectedFrameAsset!;
-        Uint8List? frameBytes;
+        Uint8List frameBytes;
 
         if (frameUrl.startsWith('http')) {
           final httpClient = HttpClient();
-          final request    = await httpClient.getUrl(Uri.parse(frameUrl));
-          final response   = await request.close();
+          final request = await httpClient.getUrl(Uri.parse(frameUrl));
+          final response = await request.close();
           frameBytes = await consolidateHttpClientResponseBytes(response);
         } else {
           final data = await rootBundle.load(frameUrl);
           frameBytes = data.buffer.asUint8List();
         }
 
-        if (frameBytes != null) {
-          final codec = await ui.instantiateImageCodec(frameBytes);
-          final frame = await codec.getNextFrame();
-          canvas.drawImageRect(
-            frame.image,
-            Rect.fromLTWH(0, 0, frame.image.width.toDouble(), frame.image.height.toDouble()),
-            Rect.fromLTWH(0, 0, w, h),
-            Paint()..filterQuality = FilterQuality.high,
-          );
-        }
+        final codec = await ui.instantiateImageCodec(frameBytes);
+        final frame = await codec.getNextFrame();
+        canvas.drawImageRect(
+          frame.image,
+          Rect.fromLTWH(0, 0, frame.image.width.toDouble(),
+              frame.image.height.toDouble()),
+          Rect.fromLTWH(0, 0, w, h),
+          Paint()..filterQuality = FilterQuality.high,
+        );
       }
 
       // ──────────────────────────────────────────────────────────
@@ -518,49 +611,61 @@ class _CameraPageState extends State<CameraPage> {
       debugPrint("🖼️ toImage done: ${uiImage.width}x${uiImage.height}");
 
       // Step 1: rawRgba dulu (instant, tidak block)
-      final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final byteData =
+          await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) throw Exception('toByteData null');
       final rawBytes = byteData.buffer.asUint8List();
       debugPrint("🖼️ rawRgba done: ${rawBytes.length} bytes");
 
       // Step 2: encode PNG di isolate background
       final pngBytes = await compute(_encodePngInIsolate, {
-        'width':  uiImage.width,
+        'width': uiImage.width,
         'height': uiImage.height,
-        'raw':    rawBytes,
+        'raw': rawBytes,
       });
       debugPrint("🖼️ PNG encode done: ${pngBytes.length} bytes");
 
       provider.setFinalImageBytes(pngBytes);
       await _uploadFinalResult(pngBytes, provider.sessionUuid);
 
-      if (mounted) setState(() { _isRendering = false; _renderDone = true; });
-
+      if (mounted) {
+        setState(() {
+          _isRendering = false;
+          _renderDone = true;
+        });
+      }
     } catch (e) {
       debugPrint("❌ Render error: $e");
-      if (mounted) setState(() { _isRendering = false; });
+      if (mounted) {
+        setState(() {
+          _isRendering = false;
+        });
+      }
     }
   }
 
-  Future<void> _uploadFinalResult(Uint8List pngBytes, String sessionUuid) async {
+  Future<void> _uploadFinalResult(
+      Uint8List pngBytes, String sessionUuid) async {
     try {
       debugPrint("📤 Mengupload hasil ke server...");
 
-      final tempDir  = await getTemporaryDirectory();
-      final tempFile = File('${tempDir.path}/result_${DateTime.now().millisecondsSinceEpoch}.png');
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(
+          '${tempDir.path}/result_${DateTime.now().millisecondsSinceEpoch}.png');
       await tempFile.writeAsBytes(pngBytes);
 
-      final uri     = Uri.parse('$_backendUrl/api/photobooth/upload/final');
+      final uri = Uri.parse('$_backendUrl/api/photobooth/upload/final');
       final request = http.MultipartRequest('POST', uri)
         ..fields['session_uuid'] = sessionUuid
-        ..files.add(await http.MultipartFile.fromPath(
-            'photo', tempFile.path,
+        ..files.add(await http.MultipartFile.fromPath('photo', tempFile.path,
             contentType: MediaType('image', 'png')));
 
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
 
-      try { await tempFile.delete(); } catch (_) {}
+      try {
+        await tempFile.delete();
+      } catch (_) {}
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         debugPrint("✅ Upload berhasil!");
@@ -581,11 +686,11 @@ class _CameraPageState extends State<CameraPage> {
     // Navigasi langsung — _renderAndUploadInBackground sudah jalan
     // sebagai fire & forget sejak foto selesai
     if (provider.selectedMode == FrameMode.static) {
-      Navigator.pushReplacement(context,
-        MaterialPageRoute(builder: (_) => const PreviewPrintPage()));
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => const PreviewPrintPage()));
     } else {
       Navigator.pushReplacement(context,
-        MaterialPageRoute(builder: (_) => const CustomizationPage()));
+          MaterialPageRoute(builder: (_) => const CustomizationPage()));
     }
   }
 
@@ -594,11 +699,11 @@ class _CameraPageState extends State<CameraPage> {
   // ================================================================
   @override
   Widget build(BuildContext context) {
-    final provider  = context.watch<PhotoProvider>();
+    final provider = context.watch<PhotoProvider>();
     // ── FIX: gunakan _lockedFilter saat sesi aktif ──
-    final filter    = _isSessionActive ? _lockedFilter : provider.selectedFilter;
+    final filter = _isSessionActive ? _lockedFilter : provider.selectedFilter;
     final int total = provider.targetPhotoCount;
-    final int done  = provider.photos.length;
+    final int done = provider.photos.length;
     final bool complete = provider.isComplete;
     final bool showBack = !_isSessionActive && done == 0;
 
@@ -607,17 +712,18 @@ class _CameraPageState extends State<CameraPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-
           // ── 1. CAMERA PREVIEW dengan filter ──
           ColorFiltered(
             colorFilter: _getLiveFilter(filter),
-            child: _cameraController != null && _cameraController!.value.isInitialized
+            child: _cameraController != null &&
+                    _cameraController!.value.isInitialized
                 ? SizedBox.expand(
                     child: FittedBox(
                       fit: BoxFit.cover,
                       child: SizedBox(
                         width: _cameraController!.value.previewSize?.width ?? 1,
-                        height: _cameraController!.value.previewSize?.height ?? 1,
+                        height:
+                            _cameraController!.value.previewSize?.height ?? 1,
                         child: CameraPreview(_cameraController!),
                       ),
                     ),
@@ -638,8 +744,11 @@ class _CameraPageState extends State<CameraPage> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 60),
                       child: Text(
-                        _debugMessage.isEmpty ? "Memuat kamera..." : _debugMessage,
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        _debugMessage.isEmpty
+                            ? "Memuat kamera..."
+                            : _debugMessage,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 13),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -651,7 +760,8 @@ class _CameraPageState extends State<CameraPage> {
           // ── 2. OVERLAY FRAME ──
           Positioned.fill(
             child: IgnorePointer(
-              child: Image.asset("assets/images/cam_ovl.png", fit: BoxFit.cover),
+              child:
+                  Image.asset("assets/images/cam_ovl.png", fit: BoxFit.cover),
             ),
           ),
 
@@ -665,13 +775,18 @@ class _CameraPageState extends State<CameraPage> {
                   tween: Tween(begin: 1.3, end: 1.0),
                   duration: const Duration(milliseconds: 400),
                   curve: Curves.elasticOut,
-                  builder: (_, scale, child) => Transform.scale(scale: scale, child: child),
+                  builder: (_, scale, child) =>
+                      Transform.scale(scale: scale, child: child),
                   child: Text(
                     '$_countdown',
                     style: const TextStyle(
-                      fontFamily: 'Ambitsek', fontSize: 260,
-                      fontWeight: FontWeight.bold, color: Colors.white,
-                      shadows: [Shadow(offset: Offset(4, 4), color: Colors.black)],
+                      fontFamily: 'Ambitsek',
+                      fontSize: 260,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(offset: Offset(4, 4), color: Colors.black)
+                      ],
                     ),
                   ),
                 ),
@@ -684,7 +799,7 @@ class _CameraPageState extends State<CameraPage> {
           // ── 4.5 DSLR PROCESSING OVERLAY ──
           if (_isDSLRProcessing)
             Container(
-              color: Colors.black.withOpacity(0.7),
+              color: Colors.black.withValues(alpha: 0.7),
               child: const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -715,57 +830,68 @@ class _CameraPageState extends State<CameraPage> {
 
           // ── 5. SIDEBAR ──
           Positioned(
-            right: 16, top: 20, bottom: 20,
+            right: 16,
+            top: 20,
+            bottom: 20,
             child: Container(
               width: 140,
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.55),
+                color: Colors.black.withValues(alpha: 0.55),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.white12),
               ),
               child: Column(
                 children: [
                   const Text("RESULTS",
-                    style: TextStyle(
-                      fontFamily: 'Ambitsek', color: Colors.white,
-                      fontSize: 13, letterSpacing: 2)),
+                      style: TextStyle(
+                          fontFamily: 'Ambitsek',
+                          color: Colors.white,
+                          fontSize: 13,
+                          letterSpacing: 2)),
 
                   Container(
                     margin: const EdgeInsets.symmetric(vertical: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
                       color: done >= total
-                          ? Colors.green.withOpacity(0.3)
-                          : Colors.white.withOpacity(0.08),
+                          ? Colors.green.withValues(alpha: 0.3)
+                          : Colors.white.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text('$done / $total',
-                      style: TextStyle(
-                        color: done >= total ? Colors.greenAccent : Colors.white60,
-                        fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: TextStyle(
+                            color: done >= total
+                                ? Colors.greenAccent
+                                : Colors.white60,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold)),
                   ),
 
                   // Filter aktif indicator
                   if (_lockedFilter != PhotoFilter.none && _isSessionActive)
                     Container(
                       margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.purpleAccent.withOpacity(0.15),
+                        color: Colors.purpleAccent.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.purpleAccent.withOpacity(0.3)),
+                        border: Border.all(
+                            color: Colors.purpleAccent.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.auto_fix_high, color: Colors.purpleAccent, size: 10),
+                          const Icon(Icons.auto_fix_high,
+                              color: Colors.purpleAccent, size: 10),
                           const SizedBox(width: 4),
-                          Text(
-                            _lockedFilter.name,
-                            style: const TextStyle(
-                              color: Colors.purpleAccent, fontSize: 9,
-                              fontWeight: FontWeight.w600)),
+                          Text(_lockedFilter.name,
+                              style: const TextStyle(
+                                  color: Colors.purpleAccent,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -774,23 +900,28 @@ class _CameraPageState extends State<CameraPage> {
                   if (_isRendering)
                     Container(
                       margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.15),
+                        color: Colors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                        border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.3)),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          SizedBox(width: 10, height: 10,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5, color: Colors.orange)),
+                          SizedBox(
+                              width: 10,
+                              height: 10,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 1.5, color: Colors.orange)),
                           SizedBox(width: 5),
                           Text("render",
-                            style: TextStyle(
-                              color: Colors.orange, fontSize: 9,
-                              fontWeight: FontWeight.w600)),
+                              style: TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -798,21 +929,25 @@ class _CameraPageState extends State<CameraPage> {
                   if (_renderDone && !_isRendering)
                     Container(
                       margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
+                        color: Colors.green.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.green.withOpacity(0.2)),
+                        border: Border.all(
+                            color: Colors.green.withValues(alpha: 0.2)),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.cloud_done, color: Colors.greenAccent, size: 10),
+                          Icon(Icons.cloud_done,
+                              color: Colors.greenAccent, size: 10),
                           SizedBox(width: 4),
                           Text("uploaded",
-                            style: TextStyle(
-                              color: Colors.greenAccent, fontSize: 9,
-                              fontWeight: FontWeight.w600)),
+                              style: TextStyle(
+                                  color: Colors.greenAccent,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -826,11 +961,12 @@ class _CameraPageState extends State<CameraPage> {
                       itemCount: total,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (ctx, i) {
-                        final has       = i < done;
+                        final has = i < done;
                         final canRetake = has && !_isSessionActive && complete;
 
                         return GestureDetector(
-                          onTap: canRetake ? () => _retakeSpecificPhoto(i) : null,
+                          onTap:
+                              canRetake ? () => _retakeSpecificPhoto(i) : null,
                           child: Stack(
                             children: [
                               AnimatedContainer(
@@ -839,60 +975,78 @@ class _CameraPageState extends State<CameraPage> {
                                 decoration: BoxDecoration(
                                   color: has
                                       ? Colors.transparent
-                                      : Colors.white.withOpacity(0.08),
+                                      : Colors.white.withValues(alpha: 0.08),
                                   border: Border.all(
-                                    color: has ? Colors.white54 : Colors.white24,
-                                    width: has ? 2 : 1),
+                                      color:
+                                          has ? Colors.white54 : Colors.white24,
+                                      width: has ? 2 : 1),
                                   borderRadius: BorderRadius.circular(10),
                                   image: has
-                                    ? DecorationImage(
-                                        image: MemoryImage(provider.photos[i].imageData),
-                                        fit: BoxFit.cover)
-                                    : null,
+                                      ? DecorationImage(
+                                          image: MemoryImage(
+                                              provider.photos[i].imageData),
+                                          fit: BoxFit.cover)
+                                      : null,
                                 ),
                                 child: !has
-                                  ? Center(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.camera_alt,
-                                            color: Colors.white24,
-                                            size: _isSessionActive && i == done ? 28 : 20),
-                                          if (_isSessionActive && i == done)
-                                            const Padding(
-                                              padding: EdgeInsets.only(top: 4),
-                                              child: SizedBox(
-                                                width: 16, height: 16,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2, color: Colors.white38)),
-                                            ),
-                                        ],
-                                      ),
-                                    )
-                                  : null,
+                                    ? Center(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.camera_alt,
+                                                color: Colors.white24,
+                                                size: _isSessionActive &&
+                                                        i == done
+                                                    ? 28
+                                                    : 20),
+                                            if (_isSessionActive && i == done)
+                                              const Padding(
+                                                padding:
+                                                    EdgeInsets.only(top: 4),
+                                                child: SizedBox(
+                                                    width: 16,
+                                                    height: 16,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            color: Colors
+                                                                .white38)),
+                                              ),
+                                          ],
+                                        ),
+                                      )
+                                    : null,
                               ),
-
                               if (canRetake)
                                 Positioned(
-                                  right: 0, bottom: 0,
+                                  right: 0,
+                                  bottom: 0,
                                   child: Container(
                                     padding: const EdgeInsets.all(5),
                                     decoration: const BoxDecoration(
-                                      color: Color(0xFFEF4444),
-                                      borderRadius: BorderRadius.only(
-                                        topLeft: Radius.circular(8),
-                                        bottomRight: Radius.circular(9))),
-                                    child: const Icon(Icons.refresh, size: 16, color: Colors.white),
+                                        color: Color(0xFFEF4444),
+                                        borderRadius: BorderRadius.only(
+                                            topLeft: Radius.circular(8),
+                                            bottomRight: Radius.circular(9))),
+                                    child: const Icon(Icons.refresh,
+                                        size: 16, color: Colors.white),
                                   ),
                                 ),
-
                               Positioned(
-                                top: 4, left: 6,
+                                top: 4,
+                                left: 6,
                                 child: Text('${i + 1}',
-                                  style: TextStyle(
-                                    color: has ? Colors.white70 : Colors.white24,
-                                    fontSize: 11, fontWeight: FontWeight.bold,
-                                    shadows: const [Shadow(color: Colors.black, blurRadius: 4)])),
+                                    style: TextStyle(
+                                        color: has
+                                            ? Colors.white70
+                                            : Colors.white24,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        shadows: const [
+                                          Shadow(
+                                              color: Colors.black,
+                                              blurRadius: 4)
+                                        ])),
                               ),
                             ],
                           ),
@@ -904,9 +1058,12 @@ class _CameraPageState extends State<CameraPage> {
                   if (complete) ...[
                     const SizedBox(height: 8),
                     Text(
-                      _retakeCount > 0 ? 'Retake: $_retakeCount×' : 'Tap foto\nuntuk retake',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                        _retakeCount > 0
+                            ? 'Retake: $_retakeCount×'
+                            : 'Tap foto\nuntuk retake',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 10)),
                   ],
                 ],
               ),
@@ -915,7 +1072,9 @@ class _CameraPageState extends State<CameraPage> {
 
           // ── 6. BOTTOM CONTROLS ──
           Positioned(
-            left: 0, right: 168, bottom: 40,
+            left: 0,
+            right: 168,
+            bottom: 40,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -926,7 +1085,10 @@ class _CameraPageState extends State<CameraPage> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: PhotoFilter.values.map((f) {
-                        final sel   = (_isSessionActive ? _lockedFilter : provider.selectedFilter) == f;
+                        final sel = (_isSessionActive
+                                ? _lockedFilter
+                                : provider.selectedFilter) ==
+                            f;
                         final asset = _filterAssets[f];
                         return GestureDetector(
                           onTap: () {
@@ -936,22 +1098,29 @@ class _CameraPageState extends State<CameraPage> {
                           },
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
-                            width: 58, height: 58,
+                            width: 58,
+                            height: 58,
                             margin: const EdgeInsets.symmetric(horizontal: 8),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: sel ? Colors.yellowAccent : Colors.white38,
-                                width: sel ? 3 : 1.5),
+                                  color: sel
+                                      ? Colors.yellowAccent
+                                      : Colors.white38,
+                                  width: sel ? 3 : 1.5),
                               image: asset != null
-                                ? DecorationImage(
-                                    image: AssetImage(asset), fit: BoxFit.cover)
-                                : null,
+                                  ? DecorationImage(
+                                      image: AssetImage(asset),
+                                      fit: BoxFit.cover)
+                                  : null,
                               boxShadow: sel
-                                ? [const BoxShadow(
-                                    color: Colors.yellowAccent,
-                                    blurRadius: 8, spreadRadius: 1)]
-                                : [],
+                                  ? [
+                                      const BoxShadow(
+                                          color: Colors.yellowAccent,
+                                          blurRadius: 8,
+                                          spreadRadius: 1)
+                                    ]
+                                  : [],
                             ),
                           ),
                         );
@@ -965,14 +1134,18 @@ class _CameraPageState extends State<CameraPage> {
                   GestureDetector(
                     onTap: _initializeSession,
                     child: Container(
-                      width: 88, height: 88,
+                      width: 88,
+                      height: 88,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
+                        color: Colors.white.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 5),
-                        boxShadow: const [BoxShadow(color: Colors.white24, blurRadius: 12)],
+                        boxShadow: const [
+                          BoxShadow(color: Colors.white24, blurRadius: 12)
+                        ],
                       ),
-                      child: const Icon(Icons.camera_alt, color: Colors.white, size: 42),
+                      child: const Icon(Icons.camera_alt,
+                          color: Colors.white, size: 42),
                     ),
                   ),
 
@@ -981,23 +1154,27 @@ class _CameraPageState extends State<CameraPage> {
                   GestureDetector(
                     onTap: _proceedToCapture,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 40, vertical: 20),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Colors.white24, Colors.white10],
-                          begin: Alignment.topLeft, end: Alignment.bottomRight),
+                            colors: [Colors.white24, Colors.white10],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight),
                         borderRadius: BorderRadius.circular(50),
                         border: Border.all(color: Colors.white, width: 2),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.white.withOpacity(0.2),
-                            blurRadius: 20, spreadRadius: 2)
+                              color: Colors.white.withValues(alpha: 0.2),
+                              blurRadius: 20,
+                              spreadRadius: 2)
                         ],
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 32),
+                          const Icon(Icons.play_arrow_rounded,
+                              color: Colors.white, size: 32),
                           const SizedBox(width: 12),
                           Text(
                             "MULAI FOTO KE-${done + 1}",
@@ -1023,10 +1200,12 @@ class _CameraPageState extends State<CameraPage> {
           // ── 7. BACK BUTTON ──
           if (showBack)
             Positioned(
-              top: 50, left: 30,
+              top: 50,
+              left: 30,
               child: GestureDetector(
                 onTap: () => Navigator.pop(context),
-                child: Image.asset("assets/images/back_cam.png", width: 150, fit: BoxFit.contain),
+                child: Image.asset("assets/images/back_cam.png",
+                    width: 150, fit: BoxFit.contain),
               ),
             ),
         ],
@@ -1054,18 +1233,20 @@ class _NextImageButtonState extends State<NextImageButton> {
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
-      onExit:  (_) => setState(() => _isHovered = false),
+      onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTapDown:   (_) => setState(() => _isPressed = true),
-        onTapUp:     (_) { setState(() => _isPressed = false); widget.onPressed(); },
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) {
+          setState(() => _isPressed = false);
+          widget.onPressed();
+        },
         onTapCancel: () => setState(() => _isPressed = false),
         child: AnimatedScale(
           scale: _isPressed ? 0.9 : (_isHovered ? 1.05 : 1.0),
           duration: const Duration(milliseconds: 100),
-          child: Image.asset(
-            "assets/images/next.png",
-            width: 180, height: 96, fit: BoxFit.contain),
+          child: Image.asset("assets/images/next.png",
+              width: 180, height: 96, fit: BoxFit.contain),
         ),
       ),
     );

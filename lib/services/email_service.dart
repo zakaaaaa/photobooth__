@@ -1,4 +1,4 @@
-
+import 'package:photobooth_app/services/app_logger.dart';
 
 import 'dart:io';
 import 'package:mailer/mailer.dart';
@@ -10,14 +10,16 @@ class EmailService {
   final String _password = 'sgbo kslt altd hlvl';
 
   // UBAH PARAMETER KE List<String> filePaths
-  Future<bool> sendEmailWithAttachments(String recipientEmail, List<String> filePaths) async {
+  Future<bool> sendEmailWithAttachments(
+      String recipientEmail, List<String> filePaths) async {
     final smtpServer = gmail(_username, _password);
 
     final message = Message()
       ..from = Address(_username, 'ITA Optical Photobooth')
       ..recipients.add(recipientEmail)
       ..subject = 'Halo, terimakasih sudah berfoto dengan kami 📸'
-      ..text = 'Ayo posting di instagram stories kamu dan tag kami @eyesonkanawa @optik_ita @optik.indojaya 🎉';
+      ..text =
+          'Ayo posting di instagram stories kamu dan tag kami @eyesonkanawa @optik_ita @optik.indojaya 🎉';
 
     // LOOPING UNTUK MENAMBAHKAN SEMUA FILE
     for (String path in filePaths) {
@@ -26,10 +28,10 @@ class EmailService {
 
     try {
       final sendReport = await send(message, smtpServer);
-      print('Message sent: ' + sendReport.toString());
+      AppLogger.debug('Message sent: $sendReport');
       return true;
     } catch (e) {
-      print('Message not sent. \n' + e.toString());
+      AppLogger.debug('Message not sent.\n$e');
       return false;
     }
   }

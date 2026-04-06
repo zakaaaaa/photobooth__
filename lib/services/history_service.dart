@@ -1,3 +1,4 @@
+import 'package:photobooth_app/services/app_logger.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:intl/intl.dart';
@@ -48,17 +49,17 @@ class HistoryService {
           final fileName = p.basename(file.path);
           // Format: sessionUuid_yyyyMMdd_HHmmss.png
           final parts = fileName.replaceAll('.png', '').split('_');
-          
+
           DateTime ts;
           String uuid;
-          
+
           if (parts.length >= 3) {
-             uuid = parts[0];
-             try {
-               ts = DateFormat('yyyyMMddHHmmss').parse('${parts[1]}${parts[2]}');
-             } catch (_) {
-               ts = await file.lastModified();
-             }
+            uuid = parts[0];
+            try {
+              ts = DateFormat('yyyyMMddHHmmss').parse('${parts[1]}${parts[2]}');
+            } catch (_) {
+              ts = await file.lastModified();
+            }
           } else {
             uuid = 'unknown';
             ts = await file.lastModified();
@@ -77,7 +78,7 @@ class HistoryService {
       strips.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       return strips;
     } catch (e) {
-      print("❌ Error reading local history: $e");
+      AppLogger.debug("❌ Error reading local history: $e");
       return [];
     }
   }
@@ -92,11 +93,11 @@ class HistoryService {
 
       final file = File(fullPath);
       await file.writeAsBytes(bytes);
-      
-      print("💾 Strip saved to local history: $fullPath");
+
+      AppLogger.debug("💾 Strip saved to local history: $fullPath");
       return fullPath;
     } catch (e) {
-      print("❌ Error saving to history: $e");
+      AppLogger.debug("❌ Error saving to history: $e");
       return null;
     }
   }

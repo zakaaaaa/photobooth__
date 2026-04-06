@@ -97,14 +97,14 @@ class _TimerBadge extends StatelessWidget {
           duration: const Duration(milliseconds: 300),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(isUrgent ? 0.85 : 0.65),
+            color: Colors.black.withValues(alpha: isUrgent ? 0.85 : 0.65),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: color.withOpacity(0.7),
+              color: color.withValues(alpha: 0.7),
               width: isUrgent ? 1.5 : 1.0,
             ),
             boxShadow: isUrgent
-                ? [BoxShadow(color: color.withOpacity(0.3), blurRadius: 12, spreadRadius: 2)]
+                ? [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 12, spreadRadius: 2)]
                 : [],
           ),
           child: Row(
@@ -117,7 +117,7 @@ class _TimerBadge extends StatelessWidget {
                 child: CircularProgressIndicator(
                   value: progress,
                   strokeWidth: 2.5,
-                  backgroundColor: Colors.white.withOpacity(0.15),
+                  backgroundColor: Colors.white.withValues(alpha: 0.15),
                   valueColor: AlwaysStoppedAnimation<Color>(color),
                 ),
               ),

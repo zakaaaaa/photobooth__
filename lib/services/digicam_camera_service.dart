@@ -1,3 +1,4 @@
+import 'package:photobooth_app/services/app_logger.dart';
 // lib/services/digicam_camera_service.dart
 import 'dart:io';
 import 'dart:typed_data';
@@ -24,13 +25,13 @@ class DigiCamCameraService {
       for (final path in possiblePaths) {
         if (await File(path).exists()) {
           _digicamPath = path;
-          print('✅ Found DigiCamControl: $path');
+          AppLogger.debug('✅ Found DigiCamControl: $path');
           break;
         }
       }
 
       if (_digicamPath == null) {
-        print('❌ DigiCamControl not found in standard locations');
+        AppLogger.debug('❌ DigiCamControl not found in standard locations');
         return false;
       }
 
@@ -38,12 +39,12 @@ class DigiCamCameraService {
       final tempDir = await getTemporaryDirectory();
       _outputFolder = '${tempDir.path}\\photobooth_captures';
       await Directory(_outputFolder!).create(recursive: true);
-      print('📁 Output folder: $_outputFolder');
+      AppLogger.debug('📁 Output folder: $_outputFolder');
 
       _isInitialized = true;
       return true;
     } catch (e) {
-      print('❌ DigiCamControl initialization error: $e');
+      AppLogger.debug('❌ DigiCamControl initialization error: $e');
       return false;
     }
   }
@@ -51,7 +52,7 @@ class DigiCamCameraService {
   // Detect Camera - Check if any camera is connected
   Future<bool> detectCamera() async {
     if (!_isInitialized || _digicamPath == null) {
-      print('❌ Not initialized');
+      AppLogger.debug('❌ Not initialized');
       return false;
     }
 
@@ -59,18 +60,18 @@ class DigiCamCameraService {
       // Check for connected cameras using /devicelist command
       final result = await _shell.run('"$_digicamPath" /devicelist');
       final output = result.first.stdout.toString();
-      
-      // digiCamControl device list output typically contains "Connected cameras:" 
+
+      // digiCamControl device list output typically contains "Connected cameras:"
       // followed by camera names or "None"
       if (output.toLowerCase().contains('none') || output.trim().isEmpty) {
-        print('⚠️ No DSLR camera detected via digiCamControl');
+        AppLogger.debug('⚠️ No DSLR camera detected via digiCamControl');
         return false;
       }
-      
-      print('✅ DSLR Camera detected: $output');
+
+      AppLogger.debug('✅ DSLR Camera detected: $output');
       return true;
     } catch (e) {
-      print('❌ Error detecting camera: $e');
+      AppLogger.debug('❌ Error detecting camera: $e');
       return false;
     }
   }
@@ -86,64 +87,64 @@ class DigiCamCameraService {
       final filename = 'capture_$timestamp.jpg';
       final filepath = '$_outputFolder\\$filename';
 
-      print('📷 Taking picture...');
-      print('Output path: $filepath');
-      
+      AppLogger.debug('📷 Taking picture...');
+      AppLogger.debug('Output path: $filepath');
+
       // Capture image dengan DigiCamControl
       final command = '"$_digicamPath" /capturenoaf /filename "$filepath"';
-      print('Command: $command');
-      
+      AppLogger.debug('Command: $command');
+
       // REVISI: Timeout dinaikkan ke 20 detik & handle onTimeout agar tidak throw exception
       await _shell.run(command).timeout(
         const Duration(seconds: 20),
         onTimeout: () {
-          print('⚠️ Shell command timeout (Process took too long), but proceeding to check file...');
+          AppLogger.debug(
+              '⚠️ Shell command timeout (Process took too long), but proceeding to check file...');
           return []; // Return list kosong agar flow tidak putus
         },
       );
 
-      print('Waiting for file transfer...');
-      
+      AppLogger.debug('Waiting for file transfer...');
+
       File? capturedFile;
 
       // REVISI: Polling loop lebih robust (Cek setiap 1 detik, max 15 kali)
       for (int i = 0; i < 15; i++) {
         final f = File(filepath);
-        
+
         // Cek apakah file ada DAN ukurannya > 0 bytes (mencegah baca file corrupt/sedang ditulis)
         if (await f.exists()) {
           final len = await f.length();
           if (len > 0) {
-            print('✅ Image file found! Size: $len bytes');
+            AppLogger.debug('✅ Image file found! Size: $len bytes');
             capturedFile = f;
             break;
           }
         }
-        
+
         await Future.delayed(const Duration(seconds: 1));
-        print('⏳ Waiting for file... ${i + 1}/15');
+        AppLogger.debug('⏳ Waiting for file... ${i + 1}/15');
       }
 
       // Proses file jika ditemukan
       if (capturedFile != null) {
-        print('Reading image file...');
+        AppLogger.debug('Reading image file...');
         final bytes = await capturedFile.readAsBytes();
-        
+
         // Delete temp file setelah dibaca untuk menghemat storage
         try {
           await capturedFile.delete();
         } catch (e) {
-          print('Warning: Could not delete temp file: $e');
+          AppLogger.debug('Warning: Could not delete temp file: $e');
         }
-        
+
         return bytes;
       } else {
-        print('❌ Image file not found after waiting');
+        AppLogger.debug('❌ Image file not found after waiting');
         return null;
       }
-
     } catch (e) {
-      print('❌ Error taking picture: $e');
+      AppLogger.debug('❌ Error taking picture: $e');
       return null;
     }
   }
@@ -156,7 +157,7 @@ class DigiCamCameraService {
       await _shell.run('"$_digicamPath" /capturenoaf');
       return true;
     } catch (e) {
-      print('Error capturing image: $e');
+      AppLogger.debug('Error capturing image: $e');
       return false;
     }
   }
@@ -169,7 +170,7 @@ class DigiCamCameraService {
       await _shell.run('"$_digicamPath" /iso $iso');
       return true;
     } catch (e) {
-      print('Error setting ISO: $e');
+      AppLogger.debug('Error setting ISO: $e');
       return false;
     }
   }
@@ -183,7 +184,7 @@ class DigiCamCameraService {
       await _shell.run('"$_digicamPath" /aperture $aperture');
       return true;
     } catch (e) {
-      print('Error setting aperture: $e');
+      AppLogger.debug('Error setting aperture: $e');
       return false;
     }
   }
@@ -197,7 +198,7 @@ class DigiCamCameraService {
       await _shell.run('"$_digicamPath" /shutter "$speed"');
       return true;
     } catch (e) {
-      print('Error setting shutter speed: $e');
+      AppLogger.debug('Error setting shutter speed: $e');
       return false;
     }
   }
@@ -210,7 +211,7 @@ class DigiCamCameraService {
       final result = await _shell.run('"$_digicamPath" /help');
       return result.first.stdout.toString();
     } catch (e) {
-      print('Error getting camera info: $e');
+      AppLogger.debug('Error getting camera info: $e');
       return null;
     }
   }
@@ -224,7 +225,7 @@ class DigiCamCameraService {
           await dir.delete(recursive: true);
         }
       } catch (e) {
-        print('Error cleaning up: $e');
+        AppLogger.debug('Error cleaning up: $e');
       }
     }
   }
