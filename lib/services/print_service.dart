@@ -10,7 +10,7 @@ class PrintService {
   PrintService._internal();
 
   /// Logika cetak standar untuk Photobooth (4R / 4x6 inch)
-  Future<bool> printStrip(BuildContext context, Uint8List imageBytes, {String sessionUuid = 'history'}) async {
+  Future<bool> printStrip(BuildContext context, Uint8List imageBytes, {String sessionUuid = 'history', int copies = 1}) async {
     bool printSuccess = false;
 
     try {
@@ -48,12 +48,17 @@ class PrintService {
       }
 
       if (targetPrinter != null && targetPrinter.isAvailable) {
-        printSuccess = await Printing.directPrintPdf(
-          printer: targetPrinter,
-          onLayout: (f) async => generateDoc(pdfFormat),
-          format: pdfFormat,
-          usePrinterSettings: true,
-        );
+        for (int i = 0; i < copies; i++) {
+          final res = await Printing.directPrintPdf(
+            printer: targetPrinter,
+            onLayout: (f) async => generateDoc(pdfFormat),
+            format: pdfFormat,
+            usePrinterSettings: true,
+          );
+          if (res) printSuccess = true;
+          // Beri sedikit jeda antar spool jika perlu (opsional)
+          if (copies > 1) await Future.delayed(const Duration(milliseconds: 500));
+        }
       }
     } catch (e) {
       debugPrint("❌ Print error: $e");
