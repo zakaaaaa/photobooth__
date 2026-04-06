@@ -48,7 +48,7 @@ class _DiagnosticPageState extends State<DiagnosticPage>
   late Animation<double> _fadeAnimation;
   late AnimationController _pulseController;
 
-  static final String _backendUrl = ConfigService().baseUrl;
+  String get _backendUrl => ConfigService().baseUrl;
 
   @override
   void initState() {
@@ -352,7 +352,7 @@ class _DiagnosticPageState extends State<DiagnosticPage>
       // 2. Ambil dari server
       try {
         final cleanedHwid = _hwid.trim();
-        final apiUrl = '$_backendUrl/api/photobooth/photos/recent?hwid=$cleanedHwid&limit=50';
+        final apiUrl = '${ConfigService().baseUrl}/api/photobooth/photos/recent?hwid=$cleanedHwid&limit=50';
         debugPrint("🌐 Fetching server history from: $apiUrl");
 
         final response = await http

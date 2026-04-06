@@ -29,9 +29,12 @@ class ConfigService {
         body: '{"hwid": "ping"}',
       ).timeout(const Duration(seconds: 2));
 
-      if (response.statusCode != 0) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         print("✅ ConfigService: Local server found at $localUrl");
         _baseUrl = localUrl;
+      } else {
+        print("⚠️ ConfigService: Local server returned error ${response.statusCode}. Falling back to $remoteUrl");
+        _baseUrl = remoteUrl;
       }
     } catch (e) {
       print("⚠️ ConfigService: Local server NOT found ($e). Falling back to $remoteUrl");

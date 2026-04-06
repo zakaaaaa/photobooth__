@@ -15,8 +15,9 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // ── Backend Auto-Discovery ──
+  // Await sebentar (max 2-3 detik) agar aplikasi punya BASE_URL yang benar saat pertama dibuka
   await ConfigService().init();
 
   // ── Fullscreen setup ──
@@ -24,17 +25,26 @@ Future<void> main() async {
     try {
       await windowManager.ensureInitialized();
 
+      // INITIAL: Mulai sebagai window normal dulu agar jika crash tidak mengunci layar
       WindowOptions windowOptions = const WindowOptions(
-        fullScreen: true,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        titleBarStyle: TitleBarStyle.hidden,
+        fullScreen: false,
+        alwaysOnTop: false,
+        skipTaskbar: false,
+        titleBarStyle: TitleBarStyle.normal,
       );
 
-      // Async: Jangan block runApp
       windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
         await windowManager.focus();
+
+        // TUNGGU 5 DETIK sebelum paksa fullscreen & alwaysOnTop
+        // Ini memberi waktu bagi OS untuk "bernapas" jika ada error di awal
+        Future.delayed(const Duration(seconds: 5), () async {
+          await windowManager.setFullScreen(true);
+          await windowManager.setAlwaysOnTop(true);
+          await windowManager.setSkipTaskbar(true);
+          await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+        });
       });
     } catch (e) {
       debugPrint('WindowManager Init Error: $e');
@@ -119,88 +129,102 @@ class _AppOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        child,
+    return KeyboardListener(
+      focusNode: FocusNode(),
+      autofocus: true,
+      onKeyEvent: (event) {
+        // 🚨 EMERGENCY EXIT: ESC + LEFT SHIFT
+        final isEsc = event.logicalKey == LogicalKeyboardKey.escape;
+        final isShift = HardwareKeyboard.instance.isShiftPressed;
 
-        // ── Hidden close button (top center, hold 3 detik untuk close) ──
-        const Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: Center(child: _HiddenCloseButton()),
-        ),
+        if (isEsc && isShift) {
+          debugPrint("🆘 EMERGENCY EXIT TRIGGERED!");
+          exit(0); // Force kill process
+        }
+      },
+      child: Stack(
+        children: [
+          child,
+          // ... rest of the overlay
 
-        // ── Timer badge ──
-        Consumer<PhotoProvider>(
-          builder: (context, provider, _) {
-            if (!provider.isSessionActive) return const SizedBox.shrink();
+          // ── Hidden close button (top center, hold 3 detik untuk close) ──
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Center(child: _HiddenCloseButton()),
+          ),
 
-            final progress = provider.timerProgress;
-            final color = provider.timerColor;
-            final timeStr = provider.timerString;
-            final isUrgent = progress < 0.2;
+          // ── Timer badge ──
+          Consumer<PhotoProvider>(
+            builder: (context, provider, _) {
+              if (!provider.isSessionActive) return const SizedBox.shrink();
 
-            return Positioned(
-              top: 20,
-              right: 24,
-              child: SafeArea(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black
-                        .withValues(alpha: isUrgent ? 0.88 : 0.65),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: color.withValues(alpha: 0.8),
-                      width: isUrgent ? 1.5 : 1.0,
+              final progress = provider.timerProgress;
+              final color = provider.timerColor;
+              final timeStr = provider.timerString;
+              final isUrgent = progress < 0.2;
+
+              return Positioned(
+                top: 20,
+                right: 24,
+                child: SafeArea(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black
+                          .withValues(alpha: isUrgent ? 0.88 : 0.65),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: color.withValues(alpha: 0.8),
+                        width: isUrgent ? 1.5 : 1.0,
+                      ),
+                      boxShadow: isUrgent
+                          ? [
+                              BoxShadow(
+                                color: color.withValues(alpha: 0.35),
+                                blurRadius: 14,
+                                spreadRadius: 2,
+                              )
+                            ]
+                          : [],
                     ),
-                    boxShadow: isUrgent
-                        ? [
-                            BoxShadow(
-                              color: color.withValues(alpha: 0.35),
-                              blurRadius: 14,
-                              spreadRadius: 2,
-                            )
-                          ]
-                        : [],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          value: progress,
-                          strokeWidth: 2.5,
-                          backgroundColor:
-                              Colors.white.withValues(alpha: 0.15),
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(color),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            value: progress,
+                            strokeWidth: 2.5,
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.15),
+                            valueColor: AlwaysStoppedAnimation<Color>(color),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        timeStr,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          fontFamily: 'monospace',
-                          letterSpacing: 1.5,
+                        const SizedBox(width: 8),
+                        Text(
+                          timeStr,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'monospace',
+                            letterSpacing: 1.5,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-        ),
-      ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }
