@@ -135,16 +135,11 @@ class _StaticFrameTemplatePageState extends State<StaticFrameTemplatePage> {
         if (data['success'] == true) {
           final List<dynamic> framesJson = data['frames'] ?? [];
 
-          // ✅ Set durasi dari API DULU, baru startSession
+          // ✅ Set durasi dari API
           final int durationMin = (data['session_duration_minutes'] as num? ?? 5).toInt();
           if (mounted) {
             final provider = Provider.of<PhotoProvider>(context, listen: false);
             provider.setSessionDuration(durationMin);
-            // ✅ Timer mulai di sini — setelah durasi dari API di-set
-            // Hanya start jika belum aktif (guard agar tidak restart saat retry/refresh)
-            if (!provider.isSessionActive) {
-              provider.startSession();
-            }
           }
 
           setState(() {
@@ -377,7 +372,13 @@ class _RetroFrameCardState extends State<RetroFrameCard> {
       debugPrint('⚠️ Frame "${template.name}" — fallback layout (belum ada slots)');
     }
 
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const CameraPage()));
+    // ✅ MULAI TIMER SESI DI SINI — Setelah frame dipilih
+    if (!provider.isSessionActive) {
+      provider.startSession();
+    }
+
+    Navigator.push(
+        context, MaterialPageRoute(builder: (_) => const CameraPage()));
   }
 
   @override

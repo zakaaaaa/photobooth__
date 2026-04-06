@@ -60,7 +60,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
   bool _hasPrinted = false;
   int _extraPrints = 0;
   bool _isExtraPaid = false;
-  static const int _extraPrintPrice = 5000;
+  static const int _extraPrintPrice = 10000;
 
   static const String _frontendUrl = 'https://app.amandya.tech';
   static final String _backendUrl = ConfigService().baseUrl;
@@ -100,10 +100,8 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
 
       if (success) {
         // ✅ SAVE TO LOCAL HISTORY
-        await HistoryService().saveToHistory(
-          provider.sessionUuid, 
-          provider.finalImageBytes!
-        );
+        await HistoryService()
+            .saveToHistory(provider.sessionUuid, provider.finalImageBytes!);
         debugPrint("💾 Photo saved to local history after printing.");
       }
 

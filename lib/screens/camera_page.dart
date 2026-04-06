@@ -618,11 +618,7 @@ class _CameraPageState extends State<CameraPage> {
                       child: SizedBox(
                         width: _cameraController!.value.previewSize?.width ?? 1,
                         height: _cameraController!.value.previewSize?.height ?? 1,
-                        child: Transform(
-                          alignment: Alignment.center,
-                          transform: Matrix4.rotationY(3.141592653589793), // ✅ Paksa efek cermin (Mirror Effect)
-                          child: CameraPreview(_cameraController!),
-                        ),
+                        child: CameraPreview(_cameraController!),
                       ),
                     ),
                   )
