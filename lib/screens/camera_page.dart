@@ -49,6 +49,7 @@ class _CameraPageState extends State<CameraPage> {
   bool _isCapturing     = false;
   int  _countdown       = 0;
   bool _showBlink       = false;
+  bool _isWaitingForManualStart = false;
   int  _retakeCount     = 0;
   bool _isDSLRProcessing = false;
 
@@ -171,13 +172,11 @@ class _CameraPageState extends State<CameraPage> {
   // ================================================================
   // SESI FOTO
   // ================================================================
-  void _startAutoSession() async {
+  void _initializeSession() async {
     if (_isSessionActive) return;
 
     final provider  = Provider.of<PhotoProvider>(context, listen: false);
-    final int total = provider.targetPhotoCount;
-    debugPrint("📸 Total foto: $total");
-
+    
     // ── FIX: Lock filter sebelum clearPhotos() ──
     _lockedFilter = provider.selectedFilter;
     debugPrint("🎨 Filter dikunci: $_lockedFilter");
@@ -185,23 +184,35 @@ class _CameraPageState extends State<CameraPage> {
     provider.clearPhotos();
     setState(() {
       _isSessionActive = true;
+      _isWaitingForManualStart = true;
       _retakeCount     = 0;
       _renderDone      = false;
     });
+  }
 
-    while (provider.photos.length < total) {
-      if (!mounted || !_isSessionActive) break;
-      if (provider.photos.isNotEmpty) {
-        await Future.delayed(const Duration(seconds: 2));
+  Future<void> _proceedToCapture() async {
+    if (!_isSessionActive || _isCapturing) return;
+
+    setState(() {
+      _isWaitingForManualStart = false;
+    });
+
+    await _performSingleCapture();
+
+    final provider = Provider.of<PhotoProvider>(context, listen: false);
+    final int total = provider.targetPhotoCount;
+
+    if (mounted) {
+      if (provider.photos.length < total) {
+        setState(() {
+          _isWaitingForManualStart = true;
+        });
+      } else {
+        setState(() {
+          _isSessionActive = false;
+        });
+        _triggerBackgroundRender();
       }
-      await _performSingleCapture();
-    }
-
-    if (mounted) setState(() => _isSessionActive = false);
-
-    if (mounted && provider.photos.length >= total) {
-      // ── FIX FREEZE: render di background, tidak block navigasi ──
-      _triggerBackgroundRender();
     }
   }
 
@@ -955,7 +966,7 @@ class _CameraPageState extends State<CameraPage> {
 
                 if (!_isSessionActive && !complete)
                   GestureDetector(
-                    onTap: _startAutoSession,
+                    onTap: _initializeSession,
                     child: Container(
                       width: 88, height: 88,
                       decoration: BoxDecoration(
@@ -965,6 +976,44 @@ class _CameraPageState extends State<CameraPage> {
                         boxShadow: const [BoxShadow(color: Colors.white24, blurRadius: 12)],
                       ),
                       child: const Icon(Icons.camera_alt, color: Colors.white, size: 42),
+                    ),
+                  ),
+
+                // ── TOMBOL MULAI PER FOTO ──
+                if (_isWaitingForManualStart && !complete)
+                  GestureDetector(
+                    onTap: _proceedToCapture,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Colors.white24, Colors.white10],
+                          begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        borderRadius: BorderRadius.circular(50),
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.white.withOpacity(0.2),
+                            blurRadius: 20, spreadRadius: 2)
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 32),
+                          const SizedBox(width: 12),
+                          Text(
+                            "MULAI FOTO KE-${done + 1}",
+                            style: const TextStyle(
+                              fontFamily: 'Ambitsek',
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
