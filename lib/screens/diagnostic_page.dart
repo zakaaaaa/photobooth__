@@ -323,7 +323,9 @@ class _DiagnosticPageState extends State<DiagnosticPage>
   // 4. HISTORY CHECK (Local + Server)
   // ================================================================
   Future<void> _checkRecentPhotos() async {
+    debugPrint("🔍 Starting Recent Photos check...");
     if (_hwid.isEmpty) {
+      debugPrint("❌ HWID is empty, cannot fetch photos.");
       if (mounted) {
         setState(() {
           _photosStatus = _CheckStatus.error;
@@ -335,7 +337,10 @@ class _DiagnosticPageState extends State<DiagnosticPage>
 
     try {
       // 1. Ambil dari lokal (Prioritas)
+      debugPrint("💾 Fetching local history...");
       final localStrips = await HistoryService().getLocalHistory();
+      debugPrint("✅ Found ${localStrips.length} local strips.");
+
       final List<_HistoryItem> items = localStrips.map((s) => _HistoryItem(
         url: s.path,
         isLocal: true,
@@ -344,53 +349,81 @@ class _DiagnosticPageState extends State<DiagnosticPage>
         localBytes: s.bytes,
       )).toList();
 
-      // 2. Ambil dari server (Gunakan endpoint photos/recent tetapi kita modifikasi URL-nya)
+      // 2. Ambil dari server
       try {
         final cleanedHwid = _hwid.trim();
-        
+        final apiUrl = '$_backendUrl/api/photobooth/photos/recent?hwid=$cleanedHwid&limit=50';
+        debugPrint("🌐 Fetching server history from: $apiUrl");
+
         final response = await http
-            .get(Uri.parse(
-                '$_backendUrl/api/photobooth/photos/recent?hwid=$cleanedHwid&limit=50'))
+            .get(Uri.parse(apiUrl))
             .timeout(const Duration(seconds: 12));
+
+        debugPrint("📡 Server Response Status: ${response.statusCode}");
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           final List<dynamic> photos = data['data'] ?? data['photos'] ?? [];
+          debugPrint("✅ Found ${photos.length} photos on server data.");
 
+          int addedCount = 0;
           for (var p in photos) {
             final String rawUrl = p['photo_url'] ?? p['url'] ?? '';
             final String code = p['transaction_code'] ?? p['session_code'] ?? '';
-            
-            if (rawUrl.isEmpty || code.isEmpty) continue;
+            final String serverDate = p['created_at'] ?? '';
+
+            if (rawUrl.isEmpty || code.isEmpty) {
+              debugPrint("⚠️ Skipping invalid photo data: url=$rawUrl code=$code");
+              continue;
+            }
 
             // ✅ TRIK CERDAS: Ubah URL foto mentah menjadi URL final.png
-            // Dari: .../public/photos/[client]/[session]/12345.jpg
-            // Ke:   .../public/results/[client]/[session]/final.png
             String finalUrl = rawUrl.replaceFirst('/photos/', '/results/');
-            
-            // Hapus filename asli (misal: 12345.jpg) lalu tambahkan final.png
             List<String> urlParts = finalUrl.split('/');
-            urlParts.removeLast();
-            urlParts.add('final.png');
-            finalUrl = urlParts.join('/');
+            if (urlParts.isNotEmpty) {
+              urlParts.removeLast();
+              urlParts.add('final.png');
+              finalUrl = urlParts.join('/');
+            }
 
-            // Hindari duplikat jika sudah ada dari foto lain dalam sesi yang sama atau di lokal
+            // debugPrint("🔗 Server Entry: $code -> Transformed: $finalUrl");
+
             if (!items.any((item) => item.sessionCode == code)) {
               items.add(_HistoryItem(
                 url: finalUrl,
                 isLocal: false,
                 sessionCode: code,
-                createdAt: p['created_at'] ?? '',
+                createdAt: serverDate,
               ));
+              addedCount++;
             }
           }
+          debugPrint("✨ Added $addedCount new UNIQUE server sessions.");
         } else {
-          debugPrint("❌ Server error ${response.statusCode}");
+          debugPrint("❌ Server error ${response.statusCode}: ${response.body}");
         }
       } catch (e) {
         debugPrint("⚠️ Gagal sync server history: $e");
-        // Lanjut dengan data lokal saja
       }
+
+      // 3. GLOBAL SORT (Urutkan dari yang terbaru)
+      debugPrint("⚖️ Sorting all history items by date descending...");
+      items.sort((a, b) {
+        try {
+          final dateA = DateTime.parse(a.createdAt);
+          final dateB = DateTime.parse(b.createdAt);
+          return dateB.compareTo(dateA);
+        } catch (e) {
+          return 0; // Gagal parsing, biarkan urutan asli
+        }
+      });
+      
+      if (items.isNotEmpty) {
+        debugPrint("📅 Newest item: ${items.first.sessionCode} (isLocal: ${items.first.isLocal})");
+        debugPrint("📅 URL: ${items.first.url}");
+      }
+
+      debugPrint("🏁 Final history count: ${items.length}");
 
       if (mounted) {
         setState(() {
@@ -402,6 +435,7 @@ class _DiagnosticPageState extends State<DiagnosticPage>
         });
       }
     } catch (e) {
+      debugPrint("🚨 Global History Check Error: $e");
       if (mounted) {
         setState(() {
           _photosStatus = _CheckStatus.error;
@@ -431,11 +465,17 @@ class _DiagnosticPageState extends State<DiagnosticPage>
       Uint8List? bytes;
       if (item.isLocal && item.localBytes != null) {
         bytes = item.localBytes;
+        debugPrint("💾 Reprinting from local storage...");
       } else {
         // Download if from server
-        final resp = await http.get(Uri.parse(item.url));
+        debugPrint("☁️ Downloading from server for reprint: ${item.url}");
+        final resp = await http.get(Uri.parse(item.url)).timeout(const Duration(seconds: 15));
         if (resp.statusCode == 200) {
           bytes = resp.bodyBytes;
+          debugPrint("✅ Download success: ${bytes.length} bytes");
+        } else {
+          debugPrint("❌ Download failed: ${resp.statusCode} - ${resp.body}");
+          throw Exception("Server returns ${resp.statusCode}. Image might not be ready yet.");
         }
       }
 
@@ -458,6 +498,7 @@ class _DiagnosticPageState extends State<DiagnosticPage>
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
+      debugPrint("🚨 Reprint Error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('❌ Gagal cetak ulang: $e'), backgroundColor: Colors.red),

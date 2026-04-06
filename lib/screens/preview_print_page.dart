@@ -98,6 +98,15 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
         copies: quantity,
       );
 
+      if (success) {
+        // ✅ SAVE TO LOCAL HISTORY
+        await HistoryService().saveToHistory(
+          provider.sessionUuid, 
+          provider.finalImageBytes!
+        );
+        debugPrint("💾 Photo saved to local history after printing.");
+      }
+
       if (mounted) Navigator.pop(context);
 
       if (success && mounted) {
