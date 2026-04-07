@@ -11,14 +11,14 @@ class PrintService {
 
   /// Logika cetak standar untuk Photobooth (4R / 4x6 inch)
   Future<bool> printStrip(BuildContext context, Uint8List imageBytes,
-      {String sessionUuid = 'history', int copies = 1}) async {
+      {String sessionUuid = 'history',
+      int copies = 1,
+      String printerKeyword = 'epson',
+      String paperSize = '4R'}) async {
     bool printSuccess = false;
 
     try {
-      // Standar 4R (4x6 inch) dlm points (72 points per inch)
-      const double width4R = 4.0 * 72.0;
-      const double height4R = 6.0 * 72.0;
-      const pdfFormat = PdfPageFormat(width4R, height4R, marginAll: 0);
+      final pdfFormat = _paperFormatFor(paperSize);
 
       Future<Uint8List> generateDoc(PdfPageFormat format) async {
         final doc = pw.Document();
@@ -39,7 +39,7 @@ class PrintService {
         final printers = await Printing.listPrinters();
         targetPrinter = printers.firstWhere(
           (p) =>
-              p.name.toLowerCase().contains("epson") ||
+              p.name.toLowerCase().contains(printerKeyword.toLowerCase()) ||
               p.name.toLowerCase().contains("d500"),
           orElse: () => printers.firstWhere((p) => p.isDefault,
               orElse: () => printers.first),
@@ -75,8 +75,7 @@ class PrintService {
             final doc = pw.Document();
             final image = pw.MemoryImage(imageBytes);
             doc.addPage(pw.Page(
-              pageFormat:
-                  const PdfPageFormat(4.0 * 72.0, 6.0 * 72.0, marginAll: 0),
+              pageFormat: _paperFormatFor(paperSize),
               build: (_) => pw.FullPage(
                 ignoreMargins: true,
                 child: pw.Image(image, fit: pw.BoxFit.cover, dpi: 300),
@@ -93,5 +92,27 @@ class PrintService {
     }
 
     return printSuccess;
+  }
+
+  PdfPageFormat _paperFormatFor(String paperSize) {
+    switch (paperSize.toUpperCase()) {
+      case 'A4':
+        return PdfPageFormat.a4.copyWith(
+          marginLeft: 0,
+          marginTop: 0,
+          marginRight: 0,
+          marginBottom: 0,
+        );
+      case 'A5':
+        return PdfPageFormat.a5.copyWith(
+          marginLeft: 0,
+          marginTop: 0,
+          marginRight: 0,
+          marginBottom: 0,
+        );
+      case '4R':
+      default:
+        return const PdfPageFormat(4.0 * 72.0, 6.0 * 72.0, marginAll: 0);
+    }
   }
 }

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_windows/webview_windows.dart';
+import '../providers/app_config_provider.dart';
 import '../providers/photo_provider.dart';
 import '../services/api_service.dart';
 import 'static_frame_template_page.dart';
@@ -19,6 +20,8 @@ class _PaymentPageState extends State<PaymentPage> {
   bool _isSelectionMode = true;
   bool _isLoading = false;
   bool _isPaid = false;
+  int _paymentAttemptId = 0;
+  bool _paymentFlowCancelled = false;
 
   // Voucher state
   bool _isVoucherMode = false;
@@ -34,8 +37,6 @@ class _PaymentPageState extends State<PaymentPage> {
   // ── DEBUG STATE ──
   final List<String> _debugLogs = [];
   String _webViewError = "";
-
-  final double _sessionPrice = 30000;
 
   @override
   void initState() {
@@ -116,6 +117,8 @@ class _PaymentPageState extends State<PaymentPage> {
   // ================================================================
   void _onSelectQRIS() {
     _log("User selected QRIS payment");
+    _paymentAttemptId++;
+    _paymentFlowCancelled = false;
     setState(() {
       _isSelectionMode = false;
       _isLoading = true;
@@ -143,7 +146,6 @@ class _PaymentPageState extends State<PaymentPage> {
       newUuid,
       hwid: provider.machineId,
       paymentMethod: 'qris',
-      amount: _sessionPrice.toStringAsFixed(0),
     );
 
     if (!sessionCreated) {
@@ -429,6 +431,8 @@ class _PaymentPageState extends State<PaymentPage> {
   // VOUCHER FLOW
   // ================================================================
   void _onSelectVoucher() {
+    _paymentAttemptId++;
+    _paymentFlowCancelled = false;
     setState(() {
       _isSelectionMode = false;
       _isVoucherMode = true;
@@ -459,7 +463,6 @@ class _PaymentPageState extends State<PaymentPage> {
       newUuid,
       hwid: provider.machineId,
       paymentMethod: 'voucher',
-      amount: _sessionPrice.toStringAsFixed(0),
       voucherCode: code,
     );
 
@@ -479,16 +482,22 @@ class _PaymentPageState extends State<PaymentPage> {
   // POLLING & SUCCESS
   // ================================================================
   void _startPolling(String uuid) {
+    final attemptId = _paymentAttemptId;
     _log("Starting payment polling for $uuid");
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted) {
         timer.cancel();
         return;
       }
+      if (_paymentFlowCancelled || attemptId != _paymentAttemptId) {
+        _log("Stopping stale payment polling for $uuid");
+        timer.cancel();
+        return;
+      }
       final apiService = Provider.of<ApiService>(context, listen: false);
       final paid = await apiService.checkPaymentStatus(uuid);
       _log("Poll check: paid=$paid");
-      if (paid) {
+      if (paid && !_paymentFlowCancelled && attemptId == _paymentAttemptId) {
         timer.cancel();
         if (mounted) _handlePaymentSuccess();
       }
@@ -497,7 +506,10 @@ class _PaymentPageState extends State<PaymentPage> {
 
   void _handlePaymentSuccess() {
     _pollingTimer?.cancel();
-    if (_isPaid) return;
+    if (_isPaid || _paymentFlowCancelled) {
+      _log("Ignoring late payment success because flow already ended.");
+      return;
+    }
     _log("🎉 Payment success!");
     if (mounted) {
       setState(() => _isPaid = true);
@@ -514,6 +526,9 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   void _resetToMenu(String message) {
+    _paymentFlowCancelled = true;
+    _paymentAttemptId++;
+    _pollingTimer?.cancel();
     _log("Reset to menu: $message");
     if (mounted) {
       setState(() {
@@ -522,6 +537,7 @@ class _PaymentPageState extends State<PaymentPage> {
         _isVoucherMode = false;
         _isWebViewReady = false;
         _webViewError = "";
+        _isPaid = false;
       });
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
@@ -553,6 +569,12 @@ class _PaymentPageState extends State<PaymentPage> {
 
   // ── MENU PILIHAN ──
   Widget _buildSelectionMenu() {
+    final appConfig = Provider.of<AppConfigProvider>(context, listen: false);
+    final canUseQris = appConfig.paymentMethodsEnabled.contains('qris');
+    final canUseVoucher =
+        appConfig.paymentMethodsEnabled.contains('voucher') &&
+        appConfig.voucherEnabled;
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -570,15 +592,17 @@ class _PaymentPageState extends State<PaymentPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            PixelCard(
-                title: "QRIS",
-                imagePath: "assets/images/qris.png",
-                onTap: _onSelectQRIS),
-            const SizedBox(width: 30),
-            PixelCard(
-                title: "VOUCHER",
-                imagePath: "assets/images/voucher.png",
-                onTap: _onSelectVoucher),
+            if (canUseQris)
+              PixelCard(
+                  title: "QRIS",
+                  imagePath: "assets/images/qris.png",
+                  onTap: _onSelectQRIS),
+            if (canUseQris && canUseVoucher) const SizedBox(width: 30),
+            if (canUseVoucher)
+              PixelCard(
+                  title: "VOUCHER",
+                  imagePath: "assets/images/voucher.png",
+                  onTap: _onSelectVoucher),
           ],
         ),
       ],

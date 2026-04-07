@@ -13,6 +13,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:webview_windows/webview_windows.dart';
+import 'package:photobooth_app/providers/app_config_provider.dart';
 import 'package:photobooth_app/providers/photo_provider.dart';
 import 'package:photobooth_app/screens/splash_screen.dart';
 import 'package:photobooth_app/services/config_service.dart';
@@ -60,7 +61,6 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
   bool _hasPrinted = false;
   int _extraPrints = 0;
   bool _isExtraPaid = false;
-  static const int _extraPrintPrice = 10000;
 
   static final String _frontendUrl = ConfigService().frontendUrl;
 
@@ -68,6 +68,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
     if (_hasPrinted && quantity == 1) return;
 
     final provider = Provider.of<PhotoProvider>(context, listen: false);
+    final appConfig = Provider.of<AppConfigProvider>(context, listen: false);
     if (provider.finalImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Please wait, preparing photo...")));
@@ -94,7 +95,9 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
         context,
         provider.finalImageBytes!,
         sessionUuid: provider.sessionUuid,
-        copies: quantity,
+        copies: appConfig.autoPrintCopies + quantity - 1,
+        printerKeyword: appConfig.preferredPrinterKeyword,
+        paperSize: appConfig.paperSize,
       );
 
       if (success) {
@@ -122,7 +125,8 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
     if (_extraPrints <= 0) return;
 
     final provider = Provider.of<PhotoProvider>(context, listen: false);
-    final totalAmount = _extraPrints * _extraPrintPrice;
+    final appConfig = Provider.of<AppConfigProvider>(context, listen: false);
+    final totalAmount = _extraPrints * appConfig.extraPrintPrice;
     final extraUuid =
         "${provider.sessionUuid}-extra-${DateTime.now().millisecondsSinceEpoch}";
     final hwid = await LicenseService().getHardwareId();
@@ -130,7 +134,10 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
     try {
       // 1. Start extra session
       final started = await ApiService().startSession(extraUuid,
-          hwid: hwid, amount: totalAmount.toString(), paymentMethod: 'qris');
+          hwid: hwid,
+          paymentMethod: 'qris',
+          transactionType: 'extra_print',
+          extraPrintCount: _extraPrints);
       if (!started) throw Exception("Failed to connect to payment server.");
 
       // 2. Get payment link
@@ -190,6 +197,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
   @override
   Widget build(BuildContext context) {
     final sessionUuid = Provider.of<PhotoProvider>(context).sessionUuid;
+    final appConfig = Provider.of<AppConfigProvider>(context, listen: false);
     final String qrUrl = '$_frontendUrl/download/$sessionUuid';
 
     return Scaffold(
@@ -256,7 +264,8 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                         ),
                         const SizedBox(height: 20),
                         // PRINT CONFIGURATION UI
-                        LayoutBuilder(builder: (context, constraints) {
+                        if (appConfig.extraPrintEnabled)
+                          LayoutBuilder(builder: (context, constraints) {
                           return Container(
                             constraints: const BoxConstraints(maxWidth: 550),
                             padding: const EdgeInsets.all(15),
@@ -337,7 +346,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                                               CrossAxisAlignment.end,
                                           children: [
                                             Text(
-                                                "Rp${_extraPrints * _extraPrintPrice}",
+                                                "Rp${_extraPrints * appConfig.extraPrintPrice}",
                                                 style: const TextStyle(
                                                     color: Colors.yellowAccent,
                                                     fontSize: 22,
@@ -407,70 +416,70 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
                   ),
                 ),
 
-                // Kanan: QR Code
-                Expanded(
-                  flex: 1,
-                  child: Center(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 50),
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            margin: const EdgeInsets.only(bottom: 20),
-                            decoration: BoxDecoration(
-                                color: const Color(0xFFC0C0C0),
-                                border:
-                                    Border.all(width: 3, color: Colors.black),
-                                boxShadow: const [
-                                  BoxShadow(
-                                      color: Colors.black54,
-                                      offset: Offset(8, 8))
-                                ]),
-                            child: Column(
-                              children: [
-                                Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 4, horizontal: 8),
-                                    color: const Color(0xFF000080),
-                                    child: const Text("ScanMe.exe",
-                                        style: TextStyle(
-                                            fontFamily: 'Ambitsek',
-                                            color: Colors.white,
-                                            fontSize: 14))),
-                                const SizedBox(height: 10),
-                                Container(
-                                    color: Colors.white,
-                                    padding: const EdgeInsets.all(10),
-                                    child: QrImageView(
-                                        data: qrUrl,
-                                        version: QrVersions.auto,
-                                        size: 180.0,
-                                        backgroundColor: Colors.white,
-                                        gapless: false)),
-                                const SizedBox(height: 10),
-                                const Text("SCAN TO DOWNLOAD",
-                                    style: TextStyle(
-                                        fontFamily: 'Poppins',
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12)),
-                                const SizedBox(height: 5),
-                                Text("ID: $sessionUuid",
-                                    style: const TextStyle(
-                                        fontFamily: 'Courier',
-                                        fontSize: 10,
-                                        color: Colors.grey)),
-                                const SizedBox(height: 10),
-                              ],
+                if (appConfig.downloadQrEnabled)
+                  Expanded(
+                    flex: 1,
+                    child: Center(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(height: 50),
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              margin: const EdgeInsets.only(bottom: 20),
+                              decoration: BoxDecoration(
+                                  color: const Color(0xFFC0C0C0),
+                                  border:
+                                      Border.all(width: 3, color: Colors.black),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                        color: Colors.black54,
+                                        offset: Offset(8, 8))
+                                  ]),
+                              child: Column(
+                                children: [
+                                  Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 4, horizontal: 8),
+                                      color: const Color(0xFF000080),
+                                      child: const Text("ScanMe.exe",
+                                          style: TextStyle(
+                                              fontFamily: 'Ambitsek',
+                                              color: Colors.white,
+                                              fontSize: 14))),
+                                  const SizedBox(height: 10),
+                                  Container(
+                                      color: Colors.white,
+                                      padding: const EdgeInsets.all(10),
+                                      child: QrImageView(
+                                          data: qrUrl,
+                                          version: QrVersions.auto,
+                                          size: 180.0,
+                                          backgroundColor: Colors.white,
+                                          gapless: false)),
+                                  const SizedBox(height: 10),
+                                  const Text("SCAN TO DOWNLOAD",
+                                      style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12)),
+                                  const SizedBox(height: 5),
+                                  Text("ID: $sessionUuid",
+                                      style: const TextStyle(
+                                          fontFamily: 'Courier',
+                                          fontSize: 10,
+                                          color: Colors.grey)),
+                                  const SizedBox(height: 10),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

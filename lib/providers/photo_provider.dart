@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -132,10 +132,8 @@ class PhotoProvider extends ChangeNotifier {
 
   // ── BARU: dipanggil saat response /api/frames diterima ──
   void setSessionDuration(int minutes) {
-    // REVISI: Paksa 5 menit sesuai permintaan user. 
-    // Abaikan jika API mengirimkan 30 menit.
-    _sessionDurationMin = 5; 
-    debugPrint('⏱ Session duration set (Forced to 5 mins): $_sessionDurationMin menit');
+    _sessionDurationMin = minutes <= 0 ? 5 : minutes;
+    debugPrint('⏱ Session duration set from config: $_sessionDurationMin menit');
   }
 
   String _sessionUuid = ''; 
@@ -168,11 +166,9 @@ class PhotoProvider extends ChangeNotifier {
     }
   }
 
-  // ── startSession: dipaksa 5 menit sesuai permintaan user ──
+  // ── startSession: gunakan durasi hasil bootstrap/config ──
   void startSession() {
     _sessionTimer?.cancel();
-    // REVISI: Paksa 5 menit (300 detik) agar tidak bisa di-override API
-    _sessionDurationMin = 5; 
     _remainingTime      = _sessionDurationMin * 60; 
     _isSessionActive    = true;
     notifyListeners();
