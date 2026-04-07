@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import '../providers/app_config_provider.dart';
+import '../providers/photo_provider.dart';
+import '../services/api_service.dart';
 import '../services/license_service.dart';
 import '../services/config_service.dart';
 import 'payment_page.dart';
@@ -15,6 +19,7 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   final LicenseService _licenseService = LicenseService();
+  final ApiService _apiService = ApiService();
 
   bool _isLoading = true;
   bool _isLicenseValid = false;
@@ -48,6 +53,30 @@ class _SplashScreenState extends State<SplashScreen> {
     final result = await _licenseService.checkLicense();
     if (!mounted) return;
 
+    if (result['success'] == true) {
+      final settings = (result['data'] as Map?)?['settings'] as Map<String, dynamic>?;
+      if (settings != null && mounted) {
+        Provider.of<AppConfigProvider>(context, listen: false)
+            .applyBootstrap({'settings': settings, 'data': result['data']});
+        Provider.of<PhotoProvider>(context, listen: false).setSessionDuration(
+          (settings['session_duration_minutes'] as num?)?.toInt() ?? 5,
+        );
+      }
+
+      final hwid = await _licenseService.getHardwareId();
+      final bootstrap = await _apiService.fetchBootstrap(hwid);
+      if (bootstrap != null && mounted) {
+        Provider.of<AppConfigProvider>(context, listen: false)
+            .applyBootstrap(bootstrap);
+        final bootstrapSettings =
+            bootstrap['settings'] as Map<String, dynamic>? ?? const {};
+        Provider.of<PhotoProvider>(context, listen: false).setSessionDuration(
+          (bootstrapSettings['session_duration_minutes'] as num?)?.toInt() ?? 5,
+        );
+      }
+    }
+
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
       if (result['success'] == true) {

@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:photobooth_app/providers/app_config_provider.dart';
 import 'package:photobooth_app/providers/photo_provider.dart';
 import 'package:photobooth_app/screens/diagnostic_page.dart';
 import 'package:photobooth_app/screens/splash_screen.dart';
@@ -12,6 +14,22 @@ import 'package:photobooth_app/services/config_service.dart';
 
 // ── Global navigator key — dipakai untuk navigasi dari mana saja ──
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+const String _startupScreen =
+    String.fromEnvironment('STARTUP_SCREEN', defaultValue: 'diagnostic');
+const String _kioskModeOverride =
+    String.fromEnvironment('ENABLE_KIOSK_MODE', defaultValue: 'auto');
+
+bool get _shouldEnableKioskMode {
+  switch (_kioskModeOverride.toLowerCase()) {
+    case 'true':
+      return true;
+    case 'false':
+      return false;
+    case 'auto':
+    default:
+      return kReleaseMode;
+  }
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,11 +39,14 @@ Future<void> main() async {
   await ConfigService().init();
 
   // ── Fullscreen setup ──
-  if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+  if ((Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
+      _shouldEnableKioskMode) {
     try {
       await windowManager.ensureInitialized();
 
-      // INITIAL: Mulai sebagai window normal dulu agar jika crash tidak mengunci layar
+      // Mulai dari window normal, lalu naikkan ke fullscreen yang paling aman.
+      // Kombinasi alwaysOnTop + skipTaskbar + hidden titlebar sempat membuat
+      // input mouse/touch tidak responsif pada beberapa mesin Windows saat debug.
       WindowOptions windowOptions = const WindowOptions(
         fullScreen: false,
         alwaysOnTop: false,
@@ -37,18 +58,17 @@ Future<void> main() async {
         await windowManager.show();
         await windowManager.focus();
 
-        // TUNGGU 5 DETIK sebelum paksa fullscreen & alwaysOnTop
-        // Ini memberi waktu bagi OS untuk "bernapas" jika ada error di awal
+        // Tunggu sebentar agar surface Flutter benar-benar siap sebelum fullscreen.
         Future.delayed(const Duration(seconds: 5), () async {
           await windowManager.setFullScreen(true);
-          await windowManager.setAlwaysOnTop(true);
-          await windowManager.setSkipTaskbar(true);
-          await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+          debugPrint('Kiosk fullscreen enabled with safe profile.');
         });
       });
     } catch (e) {
       debugPrint('WindowManager Init Error: $e');
     }
+  } else {
+    debugPrint('Kiosk window mode disabled for this run.');
   }
 
   runApp(const MyApp());
@@ -62,6 +82,18 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  Widget _buildStartupScreen() {
+    switch (_startupScreen.toLowerCase()) {
+      case 'splash':
+        debugPrint('Startup screen override: SplashScreen');
+        return const SplashScreen();
+      case 'diagnostic':
+      default:
+        debugPrint('Startup screen override: DiagnosticPage');
+        return const DiagnosticPage();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -96,6 +128,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AppConfigProvider()),
         ChangeNotifierProvider(create: (_) => PhotoProvider()),
         Provider(create: (_) => ApiService()),
       ],
@@ -114,7 +147,7 @@ class _MyAppState extends State<MyApp> {
           });
           return _AppOverlay(child: child!);
         },
-        home: const DiagnosticPage(),
+        home: _buildStartupScreen(),
       ),
     );
   }
@@ -283,7 +316,6 @@ class _HiddenCloseButtonState extends State<_HiddenCloseButton> {
 
   Future<void> _closeApp() async {
     await windowManager.setFullScreen(false);
-    await windowManager.setAlwaysOnTop(false);
     await windowManager.close();
   }
 
