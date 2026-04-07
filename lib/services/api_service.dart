@@ -1,18 +1,33 @@
-import 'package:photobooth_app/services/app_logger.dart';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:http/http.dart' as http;
+import 'package:photobooth_app/services/app_logger.dart';
+
 import 'config_service.dart';
 
 class ApiService {
   static const Set<String> _allowedPaymentMethods = {'qris', 'voucher'};
 
-  // ✅ Dinamis: Local (dev) atau VPS (prod)
   String get baseUrl => "${ConfigService().baseUrl}/api";
 
-  // =================================================================
-  // 1. LICENSE CHECK
-  // =================================================================
+  Future<Map<String, dynamic>?> fetchBootstrap(String hwid) async {
+    try {
+      final uri = Uri.parse("$baseUrl/photobooth/bootstrap?hwid=$hwid");
+      final response = await http.get(
+        uri,
+        headers: {"Accept": "application/json"},
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      AppLogger.debug("Bootstrap error: $e");
+    }
+    return null;
+  }
+
   Future<bool> checkLicense(String hwid) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/license/check");
@@ -26,19 +41,17 @@ class ApiService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      AppLogger.debug("❌ Error License: $e");
+      AppLogger.debug("License error: $e");
       return false;
     }
   }
 
-  // =================================================================
-  // 2. SESSION
-  // =================================================================
   Future<bool> startSession(
     String uuid, {
     required String hwid,
     String paymentMethod = 'qris',
-    String amount = '0',
+    String transactionType = 'session',
+    int extraPrintCount = 0,
     String? voucherCode,
   }) async {
     if (!_allowedPaymentMethods.contains(paymentMethod)) {
@@ -46,18 +59,19 @@ class ApiService {
           "Rejected unsupported payment method: $paymentMethod (uuid: $uuid)");
       return false;
     }
+
     try {
       final uri = Uri.parse("$baseUrl/photobooth/session/start");
-      AppLogger.debug("🚀 Start Session ($paymentMethod) HWID: $hwid");
-
-      final body = {
+      final body = <String, dynamic>{
         'hwid': hwid,
         'transaction_code': uuid,
-        'amount': amount,
         'payment_method': paymentMethod,
+        'transaction_type': transactionType,
       };
 
-      // Tambahkan voucher code jika ada
+      if (extraPrintCount > 0) {
+        body['extra_print_count'] = extraPrintCount;
+      }
       if (voucherCode != null && voucherCode.isNotEmpty) {
         body['code'] = voucherCode;
       }
@@ -72,110 +86,43 @@ class ApiService {
       );
 
       AppLogger.debug(
-          "🚀 Start Response: ${response.statusCode} - ${response.body}");
-
-      // ── DEBUG: Extract session_id from response jika ada ──
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        try {
-          final data = json.decode(response.body);
-          AppLogger.debug("🔍 Session response keys: ${data.keys.toList()}");
-          if (data['session_id'] != null) {
-            AppLogger.debug("🔍 Backend session_id: ${data['session_id']}");
-          }
-          if (data['uuid'] != null) {
-            AppLogger.debug("🔍 Backend uuid: ${data['uuid']}");
-          }
-          if (data['transaction_code'] != null) {
-            AppLogger.debug(
-                "🔍 Backend transaction_code: ${data['transaction_code']}");
-          }
-          // Print all data for debugging
-          AppLogger.debug("🔍 Full session response data: $data");
-        } catch (_) {}
-        return true;
-      }
-      return false;
+          "Start session response: ${response.statusCode} - ${response.body}");
+      return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
       AppLogger.debug("Error Start Session: $e");
       return false;
     }
   }
 
-  // =================================================================
-  // 3. PAYMENT
-  // =================================================================
   Future<String?> generatePaymentLink(String sessionUuid) async {
     try {
       final uri = Uri.parse("$baseUrl/payment/generate");
-
-      AppLogger.debug("──────────────────────────────────────────");
-      AppLogger.debug("💳 generatePaymentLink DEBUG");
-      AppLogger.debug("💳 URL: $uri");
-      AppLogger.debug("💳 session_uuid being sent: $sessionUuid");
-      AppLogger.debug("──────────────────────────────────────────");
-
-      final requestBody = jsonEncode({
-        'session_uuid': sessionUuid,
-      });
-      AppLogger.debug("💳 Request body: $requestBody");
-
       final response = await http.post(
         uri,
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        body: requestBody,
+        body: jsonEncode({'session_uuid': sessionUuid}),
       );
-
-      AppLogger.debug("💳 Response status: ${response.statusCode}");
-      AppLogger.debug("💳 Response headers: ${response.headers}");
-      AppLogger.debug("💳 Response body: ${response.body}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
-        AppLogger.debug("💳 Decoded response keys: ${data.keys.toList()}");
-        AppLogger.debug("💳 Full decoded data: $data");
-
-        // Coba beberapa kemungkinan field name
-        final paymentUrl = data['payment_url'] ??
+        return data['payment_url'] ??
             data['paymentUrl'] ??
             data['url'] ??
             data['checkout_url'] ??
             data['redirect_url'] ??
             data['link'];
-
-        if (paymentUrl != null) {
-          AppLogger.debug("💳 ✅ Payment URL found: $paymentUrl");
-          return paymentUrl;
-        } else {
-          AppLogger.debug("💳 ❌ No payment URL field found in response!");
-          AppLogger.debug("💳 Available keys: ${data.keys.toList()}");
-          AppLogger.debug("💳 Tip: Check backend response format");
-          return null;
-        }
-      } else {
-        AppLogger.debug("💳 ❌ Non-200 status code: ${response.statusCode}");
-        AppLogger.debug("💳 Error body: ${response.body}");
-
-        // Try to decode error response
-        try {
-          final errorData = json.decode(response.body);
-          AppLogger.debug(
-              "💳 Error message: ${errorData['message'] ?? errorData['error'] ?? 'unknown'}");
-        } catch (_) {
-          AppLogger.debug("💳 Could not decode error response");
-        }
       }
     } on SocketException catch (e) {
-      AppLogger.debug("💳 ❌ SocketException (no internet/DNS fail): $e");
+      AppLogger.debug("Payment link socket error: $e");
     } on http.ClientException catch (e) {
-      AppLogger.debug("💳 ❌ ClientException: $e");
+      AppLogger.debug("Payment link client error: $e");
     } on FormatException catch (e) {
-      AppLogger.debug("💳 ❌ FormatException (invalid JSON response): $e");
+      AppLogger.debug("Payment link format error: $e");
     } catch (e) {
-      AppLogger.debug("💳 ❌ Unexpected error: $e");
-      AppLogger.debug("💳 Error type: ${e.runtimeType}");
+      AppLogger.debug("Payment link unexpected error: $e");
     }
     return null;
   }
@@ -196,16 +143,12 @@ class ApiService {
         return data['status'] == 'paid' || data['status'] == 'free';
       }
     } catch (e) {
-      AppLogger.debug("❌ Error Check Status: $e");
+      AppLogger.debug("Check payment error: $e");
     }
     return false;
   }
 
-  // =================================================================
-  // 4. VOUCHER VALIDATION
-  // =================================================================
-  Future<Map<String, dynamic>?> validateVoucher(
-      String code, String hwid) async {
+  Future<Map<String, dynamic>?> validateVoucher(String code, String hwid) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/session/validate-voucher");
       final response = await http.post(
@@ -220,24 +163,21 @@ class ApiService {
         return json.decode(response.body);
       }
     } catch (e) {
-      AppLogger.debug("❌ Error Voucher: $e");
+      AppLogger.debug("Voucher error: $e");
     }
     return null;
   }
 
-  // =================================================================
-  // 5. UPLOAD
-  // =================================================================
   Future<bool> uploadPhoto(String uuid, String filePath) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/upload");
-      var request = http.MultipartRequest('POST', uri);
+      final request = http.MultipartRequest('POST', uri);
       request.fields['session_uuid'] = uuid;
       request.files.add(await http.MultipartFile.fromPath('photo', filePath));
-      var response = await request.send();
+      final response = await request.send();
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      AppLogger.debug("Error Upload Photo: $e");
+      AppLogger.debug("Upload photo error: $e");
       return false;
     }
   }
@@ -245,20 +185,46 @@ class ApiService {
   Future<String?> uploadFinalResult(String sessionUuid, String filePath) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/upload/final");
-      var request = http.MultipartRequest('POST', uri);
+      final request = http.MultipartRequest('POST', uri);
       request.fields['session_uuid'] = sessionUuid;
       request.files.add(await http.MultipartFile.fromPath('photo', filePath));
 
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
         return data['url'];
       }
     } catch (e) {
-      AppLogger.debug("❌ Error Upload Final: $e");
+      AppLogger.debug("Upload final error: $e");
     }
     return null;
+  }
+
+  Future<bool> sendResultEmail({
+    required String hwid,
+    required String recipientEmail,
+    required String resultUrl,
+  }) async {
+    try {
+      final uri = Uri.parse("$baseUrl/photobooth/email/send-result");
+      final response = await http.post(
+        uri,
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: jsonEncode({
+          'hwid': hwid,
+          'recipient_email': recipientEmail,
+          'result_url': resultUrl,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      AppLogger.debug("Send email error: $e");
+      return false;
+    }
   }
 }
