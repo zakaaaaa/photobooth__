@@ -156,7 +156,8 @@ class _PaymentPageState extends State<PaymentPage> {
     _log("✅ Backend session created");
 
     _log("Requesting payment link from backend...");
-    final paymentUrl = await apiService.generatePaymentLink(newUuid);
+    final paymentUrl =
+        await apiService.generatePaymentLink(newUuid, hwid: provider.machineId);
     _log("Payment URL response: $paymentUrl");
 
     if (mounted && paymentUrl != null) {
@@ -495,7 +496,8 @@ class _PaymentPageState extends State<PaymentPage> {
         return;
       }
       final apiService = Provider.of<ApiService>(context, listen: false);
-      final paid = await apiService.checkPaymentStatus(uuid);
+      final provider = Provider.of<PhotoProvider>(context, listen: false);
+      final paid = await apiService.checkPaymentStatus(uuid, hwid: provider.machineId);
       _log("Poll check: paid=$paid");
       if (paid && !_paymentFlowCancelled && attemptId == _paymentAttemptId) {
         timer.cancel();

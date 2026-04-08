@@ -94,7 +94,7 @@ class ApiService {
     }
   }
 
-  Future<String?> generatePaymentLink(String sessionUuid) async {
+  Future<String?> generatePaymentLink(String sessionUuid, {required String hwid}) async {
     try {
       final uri = Uri.parse("$baseUrl/payment/generate");
       final response = await http.post(
@@ -103,7 +103,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        body: jsonEncode({'session_uuid': sessionUuid}),
+        body: jsonEncode({'session_uuid': sessionUuid, 'hwid': hwid}),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -127,7 +127,7 @@ class ApiService {
     return null;
   }
 
-  Future<bool> checkPaymentStatus(String sessionUuid) async {
+  Future<bool> checkPaymentStatus(String sessionUuid, {required String hwid}) async {
     try {
       final uri = Uri.parse("$baseUrl/payment/check-status");
       final response = await http.post(
@@ -136,7 +136,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        body: jsonEncode({'session_uuid': sessionUuid}),
+        body: jsonEncode({'session_uuid': sessionUuid, 'hwid': hwid}),
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

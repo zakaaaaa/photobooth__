@@ -366,24 +366,16 @@ class _DiagnosticPageState extends State<DiagnosticPage>
 
           int addedCount = 0;
           for (var p in photos) {
-            final String rawUrl = p['photo_url'] ?? p['url'] ?? '';
+            final String finalUrl =
+                p['result_url'] ?? p['photo_url'] ?? p['url'] ?? '';
             final String code =
                 p['transaction_code'] ?? p['session_code'] ?? '';
             final String serverDate = p['created_at'] ?? '';
 
-            if (rawUrl.isEmpty || code.isEmpty) {
+            if (finalUrl.isEmpty || code.isEmpty) {
               debugPrint(
-                  "⚠️ Skipping invalid photo data: url=$rawUrl code=$code");
+                  "⚠️ Skipping invalid photo data: url=$finalUrl code=$code");
               continue;
-            }
-
-            // ✅ TRIK CERDAS: Ubah URL foto mentah menjadi URL final.png
-            String finalUrl = rawUrl.replaceFirst('/photos/', '/results/');
-            List<String> urlParts = finalUrl.split('/');
-            if (urlParts.isNotEmpty) {
-              urlParts.removeLast();
-              urlParts.add('final.png');
-              finalUrl = urlParts.join('/');
             }
 
             // debugPrint("🔗 Server Entry: $code -> Transformed: $finalUrl");

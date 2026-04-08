@@ -66,6 +66,9 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
 
   Future<void> _printPhoto({int quantity = 1}) async {
     if (_hasPrinted && quantity == 1) return;
+    final wasPrinted = _hasPrinted;
+    final prevExtraPrints = _extraPrints;
+    final prevIsExtraPaid = _isExtraPaid;
 
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     final appConfig = Provider.of<AppConfigProvider>(context, listen: false);
@@ -105,6 +108,14 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
         await HistoryService()
             .saveToHistory(provider.sessionUuid, provider.finalImageBytes!);
         debugPrint("💾 Photo saved to local history after printing.");
+        if (mounted) {
+          setState(() {
+            // Setelah print sukses, kuota print tambahan dianggap terpakai.
+            _hasPrinted = true;
+            _extraPrints = 0;
+            _isExtraPaid = false;
+          });
+        }
       }
 
       if (!mounted) return;
@@ -115,9 +126,23 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
             content: Text("✅ Sent to Printer!"),
             backgroundColor: Colors.green));
       }
+      if (!success && mounted) {
+        setState(() {
+          _hasPrinted = wasPrinted;
+          _extraPrints = prevExtraPrints;
+          _isExtraPaid = prevIsExtraPaid;
+        });
+      }
     } catch (e) {
       if (mounted) Navigator.pop(context);
       debugPrint("❌ Print error: $e");
+      if (mounted) {
+        setState(() {
+          _hasPrinted = wasPrinted;
+          _extraPrints = prevExtraPrints;
+          _isExtraPaid = prevIsExtraPaid;
+        });
+      }
     }
   }
 
@@ -141,7 +166,8 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
       if (!started) throw Exception("Failed to connect to payment server.");
 
       // 2. Get payment link
-      final paymentUrl = await ApiService().generatePaymentLink(extraUuid);
+      final paymentUrl =
+          await ApiService().generatePaymentLink(extraUuid, hwid: hwid);
       if (paymentUrl == null) {
         throw Exception("Could not generate payment link.");
       }
@@ -155,6 +181,7 @@ class _PreviewPrintPageState extends State<PreviewPrintPage> {
           paymentUrl: paymentUrl,
           sessionUuid: extraUuid,
           amount: totalAmount,
+          hwid: hwid,
         ),
       );
 
@@ -1065,11 +1092,13 @@ class _ExtraPaymentDialog extends StatefulWidget {
   final String paymentUrl;
   final String sessionUuid;
   final int amount;
+  final String hwid;
 
   const _ExtraPaymentDialog({
     required this.paymentUrl,
     required this.sessionUuid,
     required this.amount,
+    required this.hwid,
   });
 
   @override
@@ -1265,7 +1294,8 @@ class _ExtraPaymentDialogState extends State<_ExtraPaymentDialog> {
 
   void _startPolling() {
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-      final paid = await ApiService().checkPaymentStatus(widget.sessionUuid);
+      final paid = await ApiService()
+          .checkPaymentStatus(widget.sessionUuid, hwid: widget.hwid);
       if (paid && mounted) {
         timer.cancel();
         Navigator.pop(context, true);
