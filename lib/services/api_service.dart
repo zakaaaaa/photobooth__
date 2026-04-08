@@ -168,11 +168,14 @@ class ApiService {
     return null;
   }
 
-  Future<bool> uploadPhoto(String uuid, String filePath) async {
+  Future<bool> uploadPhoto(String uuid, String filePath, {String? hwid}) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/upload");
       final request = http.MultipartRequest('POST', uri);
       request.fields['session_uuid'] = uuid;
+      if (hwid != null && hwid.isNotEmpty) {
+        request.fields['hwid'] = hwid;
+      }
       request.files.add(await http.MultipartFile.fromPath('photo', filePath));
       final response = await request.send();
       return response.statusCode == 200 || response.statusCode == 201;
@@ -182,11 +185,14 @@ class ApiService {
     }
   }
 
-  Future<String?> uploadFinalResult(String sessionUuid, String filePath) async {
+  Future<String?> uploadFinalResult(String sessionUuid, String filePath, {String? hwid}) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/upload/final");
       final request = http.MultipartRequest('POST', uri);
       request.fields['session_uuid'] = sessionUuid;
+      if (hwid != null && hwid.isNotEmpty) {
+        request.fields['hwid'] = hwid;
+      }
       request.files.add(await http.MultipartFile.fromPath('photo', filePath));
 
       final streamedResponse = await request.send();

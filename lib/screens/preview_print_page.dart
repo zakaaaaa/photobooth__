@@ -753,6 +753,15 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
     if (mounted) setState(() => _uploadStatus = 'Mengupload ke server...');
 
     try {
+      final provider = Provider.of<PhotoProvider>(context, listen: false);
+      if (provider.machineId.isEmpty) {
+        await provider.initMachineId();
+      }
+      final hwid = provider.machineId;
+      if (hwid.isEmpty) {
+        throw Exception('HWID kosong, upload final dibatalkan.');
+      }
+
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
           '${tempDir.path}/result_${DateTime.now().millisecondsSinceEpoch}.png');
@@ -764,6 +773,7 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
       final uri = Uri.parse('$_backendUrl/api/photobooth/upload/final');
       final request = http.MultipartRequest('POST', uri)
         ..fields['session_uuid'] = sessionUuid
+        ..fields['hwid'] = hwid
         ..files.add(await http.MultipartFile.fromPath('photo', tempFile.path,
             contentType: http_parser.MediaType('image', 'png')));
 

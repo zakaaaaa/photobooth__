@@ -20,7 +20,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../services/digicam_camera_service.dart';
 
 // ================================================================
-// TOP-LEVEL ISOLATE FUNCTION — encode PNG di background thread
+// TOP-LEVEL ISOLATE FUNCTION â€” encode PNG di background thread
 // ================================================================
 Uint8List _encodePngInIsolate(Map<String, dynamic> args) {
   final int width = args['width'] as int;
@@ -61,12 +61,12 @@ class _CameraPageState extends State<CameraPage> {
   bool _isRendering = false;
   bool _renderDone = false;
 
-  // ── FIX FILTER: simpan filter yang dipilih sebelum sesi dimulai ──
+  // â”€â”€ FIX FILTER: simpan filter yang dipilih sebelum sesi dimulai â”€â”€
   PhotoFilter _lockedFilter = PhotoFilter.none;
 
   static final String _backendUrl = ConfigService().baseUrl;
 
-  // ── Filter matrices ──
+  // â”€â”€ Filter matrices â”€â”€
   static const ColorFilter _sepiaMatrix = ColorFilter.matrix(<double>[
     0.393,
     0.769,
@@ -133,7 +133,7 @@ class _CameraPageState extends State<CameraPage> {
     1,
     0,
   ]);
-  // ── FIX: smooth filter matrix (soft blur effect) ──
+  // â”€â”€ FIX: smooth filter matrix (soft blur effect) â”€â”€
   static const ColorFilter _smoothMatrix = ColorFilter.matrix(<double>[
     1.0,
     0,
@@ -216,14 +216,14 @@ class _CameraPageState extends State<CameraPage> {
         _isCameraInitialized = true;
         _debugMessage = "";
       });
-      debugPrint("✅ Camera initialized!");
+      debugPrint("âœ… Camera initialized!");
     } catch (e) {
       if (mounted) setState(() => _debugMessage = "Error kamera: $e");
-      debugPrint("❌ Camera error: $e");
+      debugPrint("âŒ Camera error: $e");
     }
   }
 
-  // ── FIX: _getLiveFilter pakai _lockedFilter saat sesi aktif ──
+  // â”€â”€ FIX: _getLiveFilter pakai _lockedFilter saat sesi aktif â”€â”€
   ColorFilter _getLiveFilter(PhotoFilter filter) {
     // Gunakan _lockedFilter jika sesi sudah dimulai supaya tidak reset
     final active = _isSessionActive ? _lockedFilter : filter;
@@ -235,7 +235,7 @@ class _CameraPageState extends State<CameraPage> {
       case PhotoFilter.brightness:
         return _brightnessMatrix;
       case PhotoFilter.smooth:
-        return _smoothMatrix; // ← FIX: smooth tidak lagi jatuh ke default
+        return _smoothMatrix; // â† FIX: smooth tidak lagi jatuh ke default
       default:
         return const ColorFilter.mode(Colors.transparent, BlendMode.dst);
     }
@@ -249,9 +249,9 @@ class _CameraPageState extends State<CameraPage> {
 
     final provider = Provider.of<PhotoProvider>(context, listen: false);
 
-    // ── FIX: Lock filter sebelum clearPhotos() ──
+    // â”€â”€ FIX: Lock filter sebelum clearPhotos() â”€â”€
     _lockedFilter = provider.selectedFilter;
-    debugPrint("🎨 Filter dikunci: $_lockedFilter");
+    debugPrint("ðŸŽ¨ Filter dikunci: $_lockedFilter");
 
     provider.clearPhotos();
     setState(() {
@@ -347,7 +347,7 @@ class _CameraPageState extends State<CameraPage> {
 
       // 1. Ambil dari Webcam sebagai Utama (Prioritas Kecepatan & Kualitas 1080p)
       debugPrint(
-          "📸 Menggunakan Webcam untuk capture (High Quality Priority)...");
+          "ðŸ“¸ Menggunakan Webcam untuk capture (High Quality Priority)...");
       final XFile result = await _cameraController!.takePicture();
       raw = await result.readAsBytes();
 
@@ -359,7 +359,7 @@ class _CameraPageState extends State<CameraPage> {
 
       final provider = Provider.of<PhotoProvider>(context, listen: false);
 
-      // ── FIX: Gunakan _lockedFilter (bukan provider.selectedFilter yang bisa berubah) ──
+      // â”€â”€ FIX: Gunakan _lockedFilter (bukan provider.selectedFilter yang bisa berubah) â”€â”€
       final Uint8List filtered =
           await ImageFilterUtil.applyFilter(imageBytes, _lockedFilter);
 
@@ -369,7 +369,7 @@ class _CameraPageState extends State<CameraPage> {
           filtered, photoIndex, provider.sessionUuid); // fire & forget
       provider.addPhoto(filtered);
     } catch (e) {
-      debugPrint('❌ Error capture: $e');
+      debugPrint('âŒ Error capture: $e');
     }
   }
 
@@ -384,9 +384,9 @@ class _CameraPageState extends State<CameraPage> {
       if (!await sessionDir.exists()) await sessionDir.create(recursive: true);
       final file = File('${sessionDir.path}/photo_$index.jpg');
       await file.writeAsBytes(bytes);
-      debugPrint("💾 Tersimpan: ${file.path}");
+      debugPrint("ðŸ’¾ Tersimpan: ${file.path}");
     } catch (e) {
-      debugPrint("❌ Gagal simpan: $e");
+      debugPrint("âŒ Gagal simpan: $e");
     }
   }
 
@@ -394,7 +394,16 @@ class _CameraPageState extends State<CameraPage> {
       Uint8List bytes, int index, String sessionUuid) async {
     try {
       if (sessionUuid.isEmpty) return;
-      debugPrint("☁️ Upload foto ${index + 1} ke server...");
+      final provider = Provider.of<PhotoProvider>(context, listen: false);
+      if (provider.machineId.isEmpty) {
+        await provider.initMachineId();
+      }
+      final hwid = provider.machineId;
+      if (hwid.isEmpty) {
+        debugPrint("Upload foto dibatalkan: HWID kosong.");
+        return;
+      }
+      debugPrint("â˜ï¸ Upload foto ${index + 1} ke server...");
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
@@ -404,6 +413,7 @@ class _CameraPageState extends State<CameraPage> {
       final uri = Uri.parse('$_backendUrl/api/photobooth/upload');
       final request = http.MultipartRequest('POST', uri)
         ..fields['session_uuid'] = sessionUuid
+        ..fields['hwid'] = hwid
         ..files.add(await http.MultipartFile.fromPath('photo', tempFile.path,
             contentType: MediaType('image', 'jpeg')));
 
@@ -415,21 +425,21 @@ class _CameraPageState extends State<CameraPage> {
       } catch (_) {}
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        debugPrint("✅ Foto ${index + 1} terupload!");
+        debugPrint("âœ… Foto ${index + 1} terupload!");
       } else {
-        debugPrint("❌ Upload foto ${index + 1} gagal: ${response.statusCode}");
+        debugPrint("âŒ Upload foto ${index + 1} gagal: ${response.statusCode}");
       }
     } catch (e) {
-      debugPrint("❌ Upload foto error: $e");
+      debugPrint("âŒ Upload foto error: $e");
     }
   }
 
   // ================================================================
   // BACKGROUND RENDER & UPLOAD
-  // ── FIX FREEZE: fire & forget, tidak block UI ──
+  // â”€â”€ FIX FREEZE: fire & forget, tidak block UI â”€â”€
   // ================================================================
   void _triggerBackgroundRender() {
-    debugPrint("🎬 Trigger background render...");
+    debugPrint("ðŸŽ¬ Trigger background render...");
     if (mounted) {
       setState(() {
         _isRendering = true;
@@ -437,13 +447,13 @@ class _CameraPageState extends State<CameraPage> {
       });
     }
     final provider = Provider.of<PhotoProvider>(context, listen: false);
-    // Tidak pakai await — jalan di background
+    // Tidak pakai await â€” jalan di background
     _renderAndUploadInBackground(provider);
   }
 
   Future<void> _renderAndUploadInBackground(PhotoProvider provider) async {
     try {
-      debugPrint("🖼️ Rendering frame result...");
+      debugPrint("ðŸ–¼ï¸ Rendering frame result...");
 
       // Skala 2.5 memadai untuk cetak 4x6 inch di ~500 DPI (Sangat Tajam & Cepat)
       const double scale = 2.5;
@@ -456,12 +466,12 @@ class _CameraPageState extends State<CameraPage> {
       // Background putih
       canvas.drawRect(Rect.fromLTWH(0, 0, w, h), Paint()..color = Colors.white);
 
-      // ──────────────────────────────────────────────────────────
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // PATH A: Custom slots dari web editor
-      // ──────────────────────────────────────────────────────────
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (provider.hasCustomSlots) {
         debugPrint(
-            "✅ Render dengan custom slots (${provider.photoSlots.length} slot, ${provider.photos.length} foto)");
+            "âœ… Render dengan custom slots (${provider.photoSlots.length} slot, ${provider.photos.length} foto)");
 
         // Pre-decode semua foto sekali
         final List<ui.Image> decodedPhotos = [];
@@ -478,7 +488,7 @@ class _CameraPageState extends State<CameraPage> {
           final image = decodedPhotos[pidx];
 
           debugPrint(
-              "  Slot ${si + 1}: photoIndex=${slot.photoIndex} → foto ${pidx + 1}, rot=${slot.rotation}°");
+              "  Slot ${si + 1}: photoIndex=${slot.photoIndex} â†’ foto ${pidx + 1}, rot=${slot.rotation}Â°");
 
           final double dx = slot.x * scale;
           final double dy = slot.y * scale;
@@ -518,11 +528,11 @@ class _CameraPageState extends State<CameraPage> {
           if (slot.rotation != 0) canvas.restore();
         }
 
-        // ──────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // PATH B: Fallback FrameLayout (grid hardcoded)
-        // ──────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       } else {
-        debugPrint("⚠️ Render dengan layout fallback");
+        debugPrint("âš ï¸ Render dengan layout fallback");
 
         final layout = provider.selectedLayout;
         final int count = provider.targetPhotoCount;
@@ -575,9 +585,9 @@ class _CameraPageState extends State<CameraPage> {
         }
       }
 
-      // ──────────────────────────────────────────────────────────
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // FRAME OVERLAY
-      // ──────────────────────────────────────────────────────────
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (provider.selectedFrameAsset != null) {
         final frameUrl = provider.selectedFrameAsset!;
         Uint8List frameBytes;
@@ -603,19 +613,19 @@ class _CameraPageState extends State<CameraPage> {
         );
       }
 
-      // ──────────────────────────────────────────────────────────
-      // CONVERT TO PNG — pakai compute() supaya tidak freeze UI
-      // ──────────────────────────────────────────────────────────
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // CONVERT TO PNG â€” pakai compute() supaya tidak freeze UI
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       final picture = recorder.endRecording();
       final uiImage = await picture.toImage(w.toInt(), h.toInt());
-      debugPrint("🖼️ toImage done: ${uiImage.width}x${uiImage.height}");
+      debugPrint("ðŸ–¼ï¸ toImage done: ${uiImage.width}x${uiImage.height}");
 
       // Step 1: rawRgba dulu (instant, tidak block)
       final byteData =
           await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) throw Exception('toByteData null');
       final rawBytes = byteData.buffer.asUint8List();
-      debugPrint("🖼️ rawRgba done: ${rawBytes.length} bytes");
+      debugPrint("ðŸ–¼ï¸ rawRgba done: ${rawBytes.length} bytes");
 
       // Step 2: encode PNG di isolate background
       final pngBytes = await compute(_encodePngInIsolate, {
@@ -623,7 +633,7 @@ class _CameraPageState extends State<CameraPage> {
         'height': uiImage.height,
         'raw': rawBytes,
       });
-      debugPrint("🖼️ PNG encode done: ${pngBytes.length} bytes");
+      debugPrint("ðŸ–¼ï¸ PNG encode done: ${pngBytes.length} bytes");
 
       provider.setFinalImageBytes(pngBytes);
       await _uploadFinalResult(pngBytes, provider.sessionUuid);
@@ -635,7 +645,7 @@ class _CameraPageState extends State<CameraPage> {
         });
       }
     } catch (e) {
-      debugPrint("❌ Render error: $e");
+      debugPrint("âŒ Render error: $e");
       if (mounted) {
         setState(() {
           _isRendering = false;
@@ -647,7 +657,17 @@ class _CameraPageState extends State<CameraPage> {
   Future<void> _uploadFinalResult(
       Uint8List pngBytes, String sessionUuid) async {
     try {
-      debugPrint("📤 Mengupload hasil ke server...");
+      final provider = Provider.of<PhotoProvider>(context, listen: false);
+      if (provider.machineId.isEmpty) {
+        await provider.initMachineId();
+      }
+      final hwid = provider.machineId;
+      if (hwid.isEmpty) {
+        debugPrint("Upload final dibatalkan: HWID kosong.");
+        return;
+      }
+
+      debugPrint("ðŸ“¤ Mengupload hasil ke server...");
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
@@ -657,6 +677,7 @@ class _CameraPageState extends State<CameraPage> {
       final uri = Uri.parse('$_backendUrl/api/photobooth/upload/final');
       final request = http.MultipartRequest('POST', uri)
         ..fields['session_uuid'] = sessionUuid
+        ..fields['hwid'] = hwid
         ..files.add(await http.MultipartFile.fromPath('photo', tempFile.path,
             contentType: MediaType('image', 'png')));
 
@@ -668,22 +689,22 @@ class _CameraPageState extends State<CameraPage> {
       } catch (_) {}
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        debugPrint("✅ Upload berhasil!");
+        debugPrint("âœ… Upload berhasil!");
       } else {
-        debugPrint("❌ Upload gagal: ${response.statusCode} — ${response.body}");
+        debugPrint("âŒ Upload gagal: ${response.statusCode} â€” ${response.body}");
       }
     } catch (e) {
-      debugPrint("❌ Upload error: $e");
+      debugPrint("âŒ Upload error: $e");
     }
   }
 
   // ================================================================
   // NAVIGASI
-  // ── FIX FREEZE: navigasi langsung, render tetap jalan di background ──
+  // â”€â”€ FIX FREEZE: navigasi langsung, render tetap jalan di background â”€â”€
   // ================================================================
   void _onNextPressed() {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
-    // Navigasi langsung — _renderAndUploadInBackground sudah jalan
+    // Navigasi langsung â€” _renderAndUploadInBackground sudah jalan
     // sebagai fire & forget sejak foto selesai
     if (provider.selectedMode == FrameMode.static) {
       Navigator.pushReplacement(
@@ -700,7 +721,7 @@ class _CameraPageState extends State<CameraPage> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PhotoProvider>();
-    // ── FIX: gunakan _lockedFilter saat sesi aktif ──
+    // â”€â”€ FIX: gunakan _lockedFilter saat sesi aktif â”€â”€
     final filter = _isSessionActive ? _lockedFilter : provider.selectedFilter;
     final int total = provider.targetPhotoCount;
     final int done = provider.photos.length;
@@ -712,7 +733,7 @@ class _CameraPageState extends State<CameraPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── 1. CAMERA PREVIEW dengan filter ──
+          // â”€â”€ 1. CAMERA PREVIEW dengan filter â”€â”€
           ColorFiltered(
             colorFilter: _getLiveFilter(filter),
             child: _cameraController != null &&
@@ -757,7 +778,7 @@ class _CameraPageState extends State<CameraPage> {
               ),
             ),
 
-          // ── 2. OVERLAY FRAME ──
+          // â”€â”€ 2. OVERLAY FRAME â”€â”€
           Positioned.fill(
             child: IgnorePointer(
               child:
@@ -765,7 +786,7 @@ class _CameraPageState extends State<CameraPage> {
             ),
           ),
 
-          // ── 3. COUNTDOWN ──
+          // â”€â”€ 3. COUNTDOWN â”€â”€
           if (_countdown > 0)
             Container(
               color: Colors.black54,
@@ -793,10 +814,10 @@ class _CameraPageState extends State<CameraPage> {
               ),
             ),
 
-          // ── 4. BLINK FLASH ──
+          // â”€â”€ 4. BLINK FLASH â”€â”€
           if (_showBlink) Container(color: Colors.white),
 
-          // ── 4.5 DSLR PROCESSING OVERLAY ──
+          // â”€â”€ 4.5 DSLR PROCESSING OVERLAY â”€â”€
           if (_isDSLRProcessing)
             Container(
               color: Colors.black.withValues(alpha: 0.7),
@@ -828,7 +849,7 @@ class _CameraPageState extends State<CameraPage> {
               ),
             ),
 
-          // ── 5. SIDEBAR ──
+          // â”€â”€ 5. SIDEBAR â”€â”€
           Positioned(
             right: 16,
             top: 20,
@@ -1059,7 +1080,7 @@ class _CameraPageState extends State<CameraPage> {
                     const SizedBox(height: 8),
                     Text(
                         _retakeCount > 0
-                            ? 'Retake: $_retakeCount×'
+                            ? 'Retake: $_retakeCountÃ—'
                             : 'Tap foto\nuntuk retake',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
@@ -1070,7 +1091,7 @@ class _CameraPageState extends State<CameraPage> {
             ),
           ),
 
-          // ── 6. BOTTOM CONTROLS ──
+          // â”€â”€ 6. BOTTOM CONTROLS â”€â”€
           Positioned(
             left: 0,
             right: 168,
@@ -1078,7 +1099,7 @@ class _CameraPageState extends State<CameraPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Filter selector — hanya tampil saat tidak ada sesi aktif
+                // Filter selector â€” hanya tampil saat tidak ada sesi aktif
                 if (!_isSessionActive)
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -1149,7 +1170,7 @@ class _CameraPageState extends State<CameraPage> {
                     ),
                   ),
 
-                // ── TOMBOL MULAI PER FOTO ──
+                // â”€â”€ TOMBOL MULAI PER FOTO â”€â”€
                 if (_isWaitingForManualStart && !complete)
                   GestureDetector(
                     onTap: _proceedToCapture,
@@ -1197,7 +1218,7 @@ class _CameraPageState extends State<CameraPage> {
             ),
           ),
 
-          // ── 7. BACK BUTTON ──
+          // â”€â”€ 7. BACK BUTTON â”€â”€
           if (showBack)
             Positioned(
               top: 50,
