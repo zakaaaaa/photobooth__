@@ -414,6 +414,7 @@ class _CameraPageState extends State<CameraPage> {
       final request = http.MultipartRequest('POST', uri)
         ..fields['session_uuid'] = sessionUuid
         ..fields['hwid'] = hwid
+        ..fields['photo_order'] = (index + 1).toString()
         ..files.add(await http.MultipartFile.fromPath('photo', tempFile.path,
             contentType: MediaType('image', 'jpeg')));
 

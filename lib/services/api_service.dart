@@ -168,13 +168,21 @@ class ApiService {
     return null;
   }
 
-  Future<bool> uploadPhoto(String uuid, String filePath, {String? hwid}) async {
+  Future<bool> uploadPhoto(
+    String uuid,
+    String filePath, {
+    String? hwid,
+    int? photoOrder,
+  }) async {
     try {
       final uri = Uri.parse("$baseUrl/photobooth/upload");
       final request = http.MultipartRequest('POST', uri);
       request.fields['session_uuid'] = uuid;
       if (hwid != null && hwid.isNotEmpty) {
         request.fields['hwid'] = hwid;
+      }
+      if (photoOrder != null && photoOrder > 0) {
+        request.fields['photo_order'] = photoOrder.toString();
       }
       request.files.add(await http.MultipartFile.fromPath('photo', filePath));
       final response = await request.send();
