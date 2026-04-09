@@ -20,7 +20,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../services/digicam_camera_service.dart';
 
 // ================================================================
-// TOP-LEVEL ISOLATE FUNCTION â€” encode PNG di background thread
+// TOP-LEVEL ISOLATE FUNCTION - encode PNG di background thread
 // ================================================================
 Uint8List _encodePngInIsolate(Map<String, dynamic> args) {
   final int width = args['width'] as int;
@@ -61,7 +61,7 @@ class _CameraPageState extends State<CameraPage> {
   bool _isRendering = false;
   bool _renderDone = false;
 
-  // â”€â”€ FIX FILTER: simpan filter yang dipilih sebelum sesi dimulai â”€â”€
+  //  FIX FILTER: simpan filter yang dipilih sebelum sesi dimulai â”€â”€
   PhotoFilter _lockedFilter = PhotoFilter.none;
 
   static final String _backendUrl = ConfigService().baseUrl;
@@ -133,7 +133,7 @@ class _CameraPageState extends State<CameraPage> {
     1,
     0,
   ]);
-  // â”€â”€ FIX: smooth filter matrix (soft blur effect) â”€â”€
+  // FIX: smooth filter matrix (soft blur effect) â”€â”€
   static const ColorFilter _smoothMatrix = ColorFilter.matrix(<double>[
     1.0,
     0,
@@ -223,7 +223,7 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
-  // â”€â”€ FIX: _getLiveFilter pakai _lockedFilter saat sesi aktif â”€â”€
+  // FIX: _getLiveFilter pakai _lockedFilter saat sesi aktif â”€â”€
   ColorFilter _getLiveFilter(PhotoFilter filter) {
     // Gunakan _lockedFilter jika sesi sudah dimulai supaya tidak reset
     final active = _isSessionActive ? _lockedFilter : filter;
@@ -235,7 +235,7 @@ class _CameraPageState extends State<CameraPage> {
       case PhotoFilter.brightness:
         return _brightnessMatrix;
       case PhotoFilter.smooth:
-        return _smoothMatrix; // â† FIX: smooth tidak lagi jatuh ke default
+        return _smoothMatrix; // FIX: smooth tidak lagi jatuh ke default
       default:
         return const ColorFilter.mode(Colors.transparent, BlendMode.dst);
     }
@@ -359,7 +359,7 @@ class _CameraPageState extends State<CameraPage> {
 
       final provider = Provider.of<PhotoProvider>(context, listen: false);
 
-      // â”€â”€ FIX: Gunakan _lockedFilter (bukan provider.selectedFilter yang bisa berubah) â”€â”€
+      // FIX: Gunakan _lockedFilter (bukan provider.selectedFilter yang bisa berubah) â”€â”€
       final Uint8List filtered =
           await ImageFilterUtil.applyFilter(imageBytes, _lockedFilter);
 
@@ -437,7 +437,7 @@ class _CameraPageState extends State<CameraPage> {
 
   // ================================================================
   // BACKGROUND RENDER & UPLOAD
-  // â”€â”€ FIX FREEZE: fire & forget, tidak block UI â”€â”€
+  // FIX FREEZE: fire & forget, tidak block UI â”€â”€
   // ================================================================
   void _triggerBackgroundRender() {
     debugPrint("✅ Trigger background render...");
@@ -467,9 +467,7 @@ class _CameraPageState extends State<CameraPage> {
       // Background putih
       canvas.drawRect(Rect.fromLTWH(0, 0, w, h), Paint()..color = Colors.white);
 
-      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // PATH A: Custom slots dari web editor
-      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (provider.hasCustomSlots) {
         debugPrint(
             "✅ Render dengan custom slots (${provider.photoSlots.length} slot, ${provider.photos.length} foto)");
@@ -489,7 +487,7 @@ class _CameraPageState extends State<CameraPage> {
           final image = decodedPhotos[pidx];
 
           debugPrint(
-              "  Slot ${si + 1}: photoIndex=${slot.photoIndex} - foto ${pidx + 1}, rot=${slot.rotation}Â°");
+              "  Slot ${si + 1}: photoIndex=${slot.photoIndex} - foto ${pidx + 1}, rot=${slot.rotation}°");
 
           final double dx = slot.x * scale;
           final double dy = slot.y * scale;
@@ -529,11 +527,9 @@ class _CameraPageState extends State<CameraPage> {
           if (slot.rotation != 0) canvas.restore();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // PATH B: Fallback FrameLayout (grid hardcoded)
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       } else {
-        debugPrint("âš ï¸ Render dengan layout fallback");
+        debugPrint("Render dengan layout fallback");
 
         final layout = provider.selectedLayout;
         final int count = provider.targetPhotoCount;
@@ -586,9 +582,7 @@ class _CameraPageState extends State<CameraPage> {
         }
       }
 
-      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // FRAME OVERLAY
-      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (provider.selectedFrameAsset != null) {
         final frameUrl = provider.selectedFrameAsset!;
         Uint8List frameBytes;
@@ -614,9 +608,7 @@ class _CameraPageState extends State<CameraPage> {
         );
       }
 
-      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // CONVERT TO PNG â€” pakai compute() supaya tidak freeze UI
-      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       final picture = recorder.endRecording();
       final uiImage = await picture.toImage(w.toInt(), h.toInt());
       debugPrint("✅ toImage done: ${uiImage.width}x${uiImage.height}");
@@ -701,7 +693,7 @@ class _CameraPageState extends State<CameraPage> {
 
   // ================================================================
   // NAVIGASI
-  // â”€â”€ FIX FREEZE: navigasi langsung, render tetap jalan di background â”€â”€
+  // FIX FREEZE: navigasi langsung, render tetap jalan di background â”€â”€
   // ================================================================
   void _onNextPressed() {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
@@ -722,7 +714,7 @@ class _CameraPageState extends State<CameraPage> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PhotoProvider>();
-    // â”€â”€ FIX: gunakan _lockedFilter saat sesi aktif â”€â”€
+    // FIX: gunakan _lockedFilter saat sesi aktif â”€â”€
     final filter = _isSessionActive ? _lockedFilter : provider.selectedFilter;
     final int total = provider.targetPhotoCount;
     final int done = provider.photos.length;
@@ -734,7 +726,7 @@ class _CameraPageState extends State<CameraPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // â”€â”€ 1. CAMERA PREVIEW dengan filter â”€â”€
+          // 1. CAMERA PREVIEW dengan filter â”€â”€
           ColorFiltered(
             colorFilter: _getLiveFilter(filter),
             child: _cameraController != null &&
@@ -779,7 +771,7 @@ class _CameraPageState extends State<CameraPage> {
               ),
             ),
 
-          // â”€â”€ 2. OVERLAY FRAME â”€â”€
+          // 2. OVERLAY FRAME â”€â”€
           Positioned.fill(
             child: IgnorePointer(
               child:
@@ -787,7 +779,7 @@ class _CameraPageState extends State<CameraPage> {
             ),
           ),
 
-          // â”€â”€ 3. COUNTDOWN â”€â”€
+          // 3. COUNTDOWN â”€â”€
           if (_countdown > 0)
             Container(
               color: Colors.black54,
@@ -815,10 +807,10 @@ class _CameraPageState extends State<CameraPage> {
               ),
             ),
 
-          // â”€â”€ 4. BLINK FLASH â”€â”€
+          // 4. BLINK FLASH â”€â”€
           if (_showBlink) Container(color: Colors.white),
 
-          // â”€â”€ 4.5 DSLR PROCESSING OVERLAY â”€â”€
+          // 4.5 DSLR PROCESSING OVERLAY â”€â”€
           if (_isDSLRProcessing)
             Container(
               color: Colors.black.withValues(alpha: 0.7),
@@ -850,7 +842,7 @@ class _CameraPageState extends State<CameraPage> {
               ),
             ),
 
-          // â”€â”€ 5. SIDEBAR â”€â”€
+          // 5. SIDEBAR â”€â”€
           Positioned(
             right: 16,
             top: 20,
@@ -1092,7 +1084,7 @@ class _CameraPageState extends State<CameraPage> {
             ),
           ),
 
-          // â”€â”€ 6. BOTTOM CONTROLS â”€â”€
+          // 6. BOTTOM CONTROLS â”€â”€
           Positioned(
             left: 0,
             right: 168,
@@ -1100,7 +1092,7 @@ class _CameraPageState extends State<CameraPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Filter selector â€” hanya tampil saat tidak ada sesi aktif
+                // Filter selector — hanya tampil saat tidak ada sesi aktif
                 if (!_isSessionActive)
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -1219,7 +1211,7 @@ class _CameraPageState extends State<CameraPage> {
             ),
           ),
 
-          // â”€â”€ 7. BACK BUTTON â”€â”€
+          // 7. BACK BUTTON â”€â”€
           if (showBack)
             Positioned(
               top: 50,
