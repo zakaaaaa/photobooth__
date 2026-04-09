@@ -47,6 +47,18 @@ class _SplashScreenState extends State<SplashScreen> {
     }
   }
 
+  void _applyRuntimeSettings(Map<String, dynamic> payload) {
+    if (!mounted) return;
+    final appConfig = Provider.of<AppConfigProvider>(context, listen: false);
+    final photoProvider = Provider.of<PhotoProvider>(context, listen: false);
+
+    appConfig.applyBootstrap(payload);
+    final settings = payload['settings'] as Map<String, dynamic>? ?? const {};
+    photoProvider.setSessionDuration(
+      (settings['session_duration_minutes'] as num?)?.toInt() ?? 5,
+    );
+  }
+
   Future<void> _checkAccess() async {
     await Future.delayed(const Duration(seconds: 2));
 
@@ -54,25 +66,19 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (result['success'] == true) {
-      final settings = (result['data'] as Map?)?['settings'] as Map<String, dynamic>?;
-      if (settings != null && mounted) {
-        Provider.of<AppConfigProvider>(context, listen: false)
-            .applyBootstrap({'settings': settings, 'data': result['data']});
-        Provider.of<PhotoProvider>(context, listen: false).setSessionDuration(
-          (settings['session_duration_minutes'] as num?)?.toInt() ?? 5,
-        );
-      }
-
       final hwid = await _licenseService.getHardwareId();
       final bootstrap = await _apiService.fetchBootstrap(hwid);
-      if (bootstrap != null && mounted) {
-        Provider.of<AppConfigProvider>(context, listen: false)
-            .applyBootstrap(bootstrap);
-        final bootstrapSettings =
-            bootstrap['settings'] as Map<String, dynamic>? ?? const {};
-        Provider.of<PhotoProvider>(context, listen: false).setSessionDuration(
-          (bootstrapSettings['session_duration_minutes'] as num?)?.toInt() ?? 5,
-        );
+      if (bootstrap != null) {
+        _applyRuntimeSettings(bootstrap);
+      } else {
+        final fallbackSettings =
+            (result['data'] as Map?)?['settings'] as Map<String, dynamic>?;
+        if (fallbackSettings != null) {
+          _applyRuntimeSettings({
+            'settings': fallbackSettings,
+            'data': result['data'],
+          });
+        }
       }
     }
 

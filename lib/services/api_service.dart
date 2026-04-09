@@ -148,26 +148,6 @@ class ApiService {
     return false;
   }
 
-  Future<Map<String, dynamic>?> validateVoucher(String code, String hwid) async {
-    try {
-      final uri = Uri.parse("$baseUrl/photobooth/session/validate-voucher");
-      final response = await http.post(
-        uri,
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: jsonEncode({'code': code, 'hwid': hwid}),
-      );
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      }
-    } catch (e) {
-      AppLogger.debug("Voucher error: $e");
-    }
-    return null;
-  }
-
   Future<bool> uploadPhoto(
     String uuid,
     String filePath, {
