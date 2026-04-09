@@ -6,6 +6,8 @@ import 'package:webview_windows/webview_windows.dart';
 import '../providers/app_config_provider.dart';
 import '../providers/photo_provider.dart';
 import '../services/api_service.dart';
+import '../services/app_logger.dart';
+import '../services/payment_webview_scripts.dart';
 import 'static_frame_template_page.dart';
 import '../widgets/retro_keyboard.dart';
 
@@ -17,6 +19,15 @@ class PaymentPage extends StatefulWidget {
 }
 
 class _PaymentPageState extends State<PaymentPage> {
+  static const bool _enableVerbosePaymentLogs = bool.fromEnvironment(
+    'PAYMENT_VERBOSE_LOGS',
+    defaultValue: false,
+  );
+  static const bool _enableQrisAutoSelect = bool.fromEnvironment(
+    'PAYMENT_AUTO_SELECT_QRIS',
+    defaultValue: true,
+  );
+
   bool _isSelectionMode = true;
   bool _isLoading = false;
   bool _isPaid = false;
@@ -34,14 +45,15 @@ class _PaymentPageState extends State<PaymentPage> {
   final WebviewController _webviewController = WebviewController();
   bool _isWebViewReady = false;
 
-  // ── DEBUG STATE ──
-  final List<String> _debugLogs = [];
+  // -- DEBUG STATE --
   String _webViewError = "";
 
   @override
   void initState() {
     super.initState();
-    _runEnvironmentCheck();
+    if (_enableVerbosePaymentLogs) {
+      _runEnvironmentCheck();
+    }
   }
 
   @override
@@ -57,48 +69,45 @@ class _PaymentPageState extends State<PaymentPage> {
   // ================================================================
   // DEBUG HELPERS
   // ================================================================
-  void _log(String message) {
+  void _log(String message, {bool verboseOnly = false}) {
+    if (verboseOnly && !_enableVerbosePaymentLogs) return;
     final timestamp = DateTime.now().toIso8601String().substring(11, 23);
     final entry = "[$timestamp] $message";
-    debugPrint("🔍 WEBVIEW_DEBUG: $entry");
-    if (mounted) {
-      setState(() => _debugLogs.add(entry));
-    }
+    debugPrint("WEBVIEW_DEBUG: $entry");
+    AppLogger.debug("PaymentPage: $entry");
   }
 
   /// Run environment diagnostics on page load
   Future<void> _runEnvironmentCheck() async {
-    _log("=== ENVIRONMENT CHECK START ===");
+    _log("=== ENVIRONMENT CHECK START ===", verboseOnly: true);
     _log(
-        "Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}");
-    _log("Dart version: ${Platform.version}");
-    _log("Executable: ${Platform.resolvedExecutable}");
+      "Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}",
+      verboseOnly: true,
+    );
+    _log("Dart version: ${Platform.version}", verboseOnly: true);
+    _log("Executable: ${Platform.resolvedExecutable}", verboseOnly: true);
 
-    // Check WebView2 Runtime availability
     try {
       final webviewVersion = await WebviewController.getWebViewVersion();
-      _log("✅ WebView2 Runtime version: $webviewVersion");
+      _log("WebView2 Runtime version: $webviewVersion", verboseOnly: true);
     } catch (e) {
-      _log("❌ WebView2 Runtime NOT FOUND or error: $e");
-      _log(
-          "   → Install from: https://developer.microsoft.com/en-us/microsoft-edge/webview2/");
+      _log("WebView2 Runtime check failed: $e", verboseOnly: true);
     }
 
-    // Check network connectivity to common endpoints
-    _log("--- Network connectivity test ---");
+    _log("--- Network connectivity test ---", verboseOnly: true);
     for (final host in ['google.com', 'doku.com', '8.8.8.8']) {
       try {
         final result = await InternetAddress.lookup(host)
             .timeout(const Duration(seconds: 5));
         if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
-          _log("✅ DNS resolve OK: $host → ${result[0].address}");
+          _log("DNS resolve OK: $host -> ${result[0].address}",
+              verboseOnly: true);
         }
       } catch (e) {
-        _log("❌ DNS resolve FAIL: $host → $e");
+        _log("DNS resolve FAIL: $host -> $e", verboseOnly: true);
       }
     }
 
-    // Check environment variables that might affect WebView
     final envVars = [
       'WEBVIEW2_BROWSER_EXECUTABLE_FOLDER',
       'WEBVIEW2_USER_DATA_FOLDER',
@@ -106,10 +115,10 @@ class _PaymentPageState extends State<PaymentPage> {
     ];
     for (final v in envVars) {
       final val = Platform.environment[v];
-      _log("ENV $v = ${val ?? '(not set)'}");
+      _log("ENV $v = ${val ?? '(not set)'}", verboseOnly: true);
     }
 
-    _log("=== ENVIRONMENT CHECK END ===");
+    _log("=== ENVIRONMENT CHECK END ===", verboseOnly: true);
   }
 
   // ================================================================
@@ -149,11 +158,11 @@ class _PaymentPageState extends State<PaymentPage> {
     );
 
     if (!sessionCreated) {
-      _log("❌ Backend session creation FAILED");
+      _log("ÃƒÂ¢Ã‚ÂÃ…â€™ Backend session creation FAILED");
       _resetToMenu("Gagal membuat sesi. Cek koneksi internet.");
       return;
     }
-    _log("✅ Backend session created");
+    _log("ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Backend session created");
 
     _log("Requesting payment link from backend...");
     final paymentUrl =
@@ -212,7 +221,7 @@ class _PaymentPageState extends State<PaymentPage> {
       await _webviewController.setBackgroundColor(Colors.white);
       _log("Step 3/5: ✅ Background color set");
     } catch (e) {
-      _log("Step 3/5: ⚠️ setBackgroundColor failed (non-critical): $e");
+      _log("Step 3/5: ❌ setBackgroundColor failed (non-critical): $e");
     }
 
     // Step 4: Register event listeners
@@ -220,15 +229,18 @@ class _PaymentPageState extends State<PaymentPage> {
       _log("Step 4/5: Registering event listeners...");
 
       _webviewController.loadingState.listen((state) {
-        _log("📡 LoadingState changed: $state");
+        _log("LoadingState changed: $state", verboseOnly: true);
         if (state == LoadingState.navigationCompleted) {
-          _log("✅ Navigation completed — injecting QRIS auto-select script");
+          _log(
+            "Navigation completed - injecting QRIS auto-select script",
+            verboseOnly: true,
+          );
           _injectAutoSelectQrisScript();
         }
       });
 
       _webviewController.url.listen((url) {
-        _log("📡 URL changed: $url");
+        _log("URL changed: $url", verboseOnly: true);
       });
 
       // WebErrorStatus is an enum, not an object with .errorCode/.url
@@ -241,11 +253,11 @@ class _PaymentPageState extends State<PaymentPage> {
       });
 
       _webviewController.containsFullScreenElementChanged.listen((flag) {
-        _log("📡 Fullscreen changed: $flag");
+        _log("Fullscreen changed: $flag", verboseOnly: true);
       });
 
       _webviewController.securityStateChanged.listen((state) {
-        _log("📡 Security state changed: $state");
+        _log("Security state changed: $state", verboseOnly: true);
       });
 
       _log("Step 4/5: ✅ Event listeners registered");
@@ -276,155 +288,21 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   /// Inject JavaScript to auto-select QRIS payment on DOKU checkout page
-  /// and scroll to the QR code
+  /// and scroll to the QR code.
+  ///
+  /// This behavior is optional because checkout DOM can change over time.
   void _injectAutoSelectQrisScript() async {
-    const jsCode = '''
-      (function() {
-        var qrisClicked = false;
-
-        function simulateClick(el) {
-          ['mousedown', 'mouseup', 'click'].forEach(function(evtType) {
-            el.dispatchEvent(new MouseEvent(evtType, {
-              bubbles: true, cancelable: true, view: window
-            }));
-          });
-        }
-
-        function trySelectQris(attempt) {
-          if (attempt > 30 || qrisClicked) return;
-
-          var xpathResult = document.evaluate(
-            "//*[contains(translate(text(),'qris','QRIS'),'QRIS')]",
-            document, null,
-            XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null
-          );
-
-          for (var i = 0; i < xpathResult.snapshotLength; i++) {
-            var node = xpathResult.snapshotItem(i);
-            var target = node;
-            for (var depth = 0; depth < 8; depth++) {
-              if (!target) break;
-              var tag = (target.tagName || '').toUpperCase();
-              var role = (target.getAttribute && target.getAttribute('role')) || '';
-              var cursor = window.getComputedStyle(target).cursor;
-
-              if (tag === 'BUTTON' || tag === 'A' || tag === 'LI' ||
-                  role === 'button' || role === 'tab' || role === 'option' ||
-                  cursor === 'pointer' ||
-                  target.onclick != null ||
-                  (target.className && target.className.toString().match(/channel|method|option|item|card|tab|accordion/i))) {
-                simulateClick(target);
-                qrisClicked = true;
-                console.log('[AutoQRIS] Clicked QRIS element:', tag, target.className);
-                setTimeout(function() { scrollToQrCode(0); }, 2000);
-                return;
-              }
-              target = target.parentElement;
-            }
-          }
-
-          var fallbackSelectors = [
-            '[data-channel*="qris" i]',
-            '[data-channel*="QRIS"]',
-            '[data-payment*="qris" i]',
-            '[data-value*="qris" i]',
-            '[id*="qris" i]',
-            '[class*="qris" i]',
-            '[class*="channel" i]',
-          ];
-          for (var s = 0; s < fallbackSelectors.length; s++) {
-            try {
-              var els = document.querySelectorAll(fallbackSelectors[s]);
-              for (var j = 0; j < els.length; j++) {
-                var txt = (els[j].textContent || '').toUpperCase();
-                if (txt.indexOf('QRIS') !== -1) {
-                  simulateClick(els[j]);
-                  qrisClicked = true;
-                  console.log('[AutoQRIS] Fallback clicked:', els[j].tagName, els[j].className);
-                  setTimeout(function() { scrollToQrCode(0); }, 2000);
-                  return;
-                }
-              }
-            } catch(e) {}
-          }
-
-          if (!qrisClicked) {
-            var all = document.querySelectorAll('*');
-            for (var k = 0; k < all.length; k++) {
-              var el = all[k];
-              var directText = '';
-              for (var c = 0; c < el.childNodes.length; c++) {
-                if (el.childNodes[c].nodeType === 3) {
-                  directText += el.childNodes[c].textContent;
-                }
-              }
-              if (directText.trim().toUpperCase().indexOf('QRIS') !== -1) {
-                var clickTarget = el;
-                while (clickTarget && clickTarget !== document.body) {
-                  var cs = window.getComputedStyle(clickTarget).cursor;
-                  if (cs === 'pointer') {
-                    simulateClick(clickTarget);
-                    qrisClicked = true;
-                    console.log('[AutoQRIS] Last-resort clicked:', clickTarget.tagName);
-                    setTimeout(function() { scrollToQrCode(0); }, 2000);
-                    return;
-                  }
-                  clickTarget = clickTarget.parentElement;
-                }
-                simulateClick(el);
-                qrisClicked = true;
-                console.log('[AutoQRIS] Direct clicked:', el.tagName);
-                setTimeout(function() { scrollToQrCode(0); }, 2000);
-                return;
-              }
-            }
-          }
-
-          setTimeout(function() { trySelectQris(attempt + 1); }, 500);
-        }
-
-        function scrollToQrCode(attempt) {
-          if (attempt > 30) return;
-          var qrSelectors = [
-            'img[src*="qr"]', 'img[alt*="qr" i]', 'img[alt*="QRIS" i]',
-            'canvas', '[class*="qr-code" i]', '[class*="qrcode" i]',
-            '[id*="qr" i]', 'img[src*="payment"]',
-            'img[src*="doku"]', 'img[src*="shopeepay"]',
-          ];
-          var qrElement = null;
-          for (var s = 0; s < qrSelectors.length; s++) {
-            try {
-              qrElement = document.querySelector(qrSelectors[s]);
-              if (qrElement) break;
-            } catch(e) {}
-          }
-          if (qrElement) {
-            qrElement.scrollIntoView({behavior: 'smooth', block: 'center'});
-          } else {
-            setTimeout(function() { scrollToQrCode(attempt + 1); }, 500);
-          }
-        }
-
-        var observer = new MutationObserver(function(mutations) {
-          if (!qrisClicked) {
-            trySelectQris(0);
-          } else {
-            observer.disconnect();
-          }
-        });
-        observer.observe(document.body || document.documentElement, {
-          childList: true, subtree: true
-        });
-
-        setTimeout(function() { trySelectQris(0); }, 1500);
-      })();
-    ''';
+    if (!_enableQrisAutoSelect) {
+      _log("QRIS auto-select disabled by config.", verboseOnly: true);
+      return;
+    }
 
     try {
-      await _webviewController.executeScript(jsCode);
-      _log("✅ QRIS auto-select JS injected");
+      await _webviewController
+          .executeScript(PaymentWebviewScripts.autoSelectQris);
+      _log("QRIS auto-select JS injected", verboseOnly: true);
     } catch (e) {
-      _log("⚠️ JS injection error: $e");
+      _log("JS injection error: $e");
     }
   }
 
@@ -497,8 +375,9 @@ class _PaymentPageState extends State<PaymentPage> {
       }
       final apiService = Provider.of<ApiService>(context, listen: false);
       final provider = Provider.of<PhotoProvider>(context, listen: false);
-      final paid = await apiService.checkPaymentStatus(uuid, hwid: provider.machineId);
-      _log("Poll check: paid=$paid");
+      final paid =
+          await apiService.checkPaymentStatus(uuid, hwid: provider.machineId);
+      _log("Poll check: paid=$paid", verboseOnly: true);
       if (paid && !_paymentFlowCancelled && attemptId == _paymentAttemptId) {
         timer.cancel();
         if (mounted) _handlePaymentSuccess();
@@ -512,7 +391,7 @@ class _PaymentPageState extends State<PaymentPage> {
       _log("Ignoring late payment success because flow already ended.");
       return;
     }
-    _log("🎉 Payment success!");
+    _log("✅ Payment success!");
     if (mounted) {
       setState(() => _isPaid = true);
       Provider.of<PhotoProvider>(context, listen: false).reset();
@@ -569,12 +448,11 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ── MENU PILIHAN ──
+  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ MENU PILIHAN ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
   Widget _buildSelectionMenu() {
     final appConfig = Provider.of<AppConfigProvider>(context, listen: false);
     final canUseQris = appConfig.paymentMethodsEnabled.contains('qris');
-    final canUseVoucher =
-        appConfig.paymentMethodsEnabled.contains('voucher') &&
+    final canUseVoucher = appConfig.paymentMethodsEnabled.contains('voucher') &&
         appConfig.voucherEnabled;
 
     return Column(
@@ -611,7 +489,7 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ── PAYMENT WEBVIEW ──
+  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ PAYMENT WEBVIEW ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
   Widget _buildPaymentWebView() {
     return Container(
       width: 500,
@@ -667,7 +545,7 @@ class _PaymentPageState extends State<PaymentPage> {
                                     Text("Memuat WebView..."),
                                     SizedBox(height: 4),
                                     Text(
-                                      "Jika stuck, klik SHOW DEBUG",
+                                      "Jika stuck, cek log backend/payment",
                                       style: TextStyle(
                                           fontSize: 11, color: Colors.black45),
                                     ),
@@ -702,7 +580,7 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ── WEBVIEW ERROR VIEW ──
+  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ WEBVIEW ERROR VIEW ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
   Widget _buildWebViewErrorView() {
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -748,7 +626,7 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ── VOUCHER INPUT ──
+  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ VOUCHER INPUT ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
   Widget _buildVoucherInput() {
     return Container(
       width: 580, // Increased width to fit keyboard

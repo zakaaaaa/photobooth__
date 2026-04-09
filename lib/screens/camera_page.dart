@@ -216,10 +216,10 @@ class _CameraPageState extends State<CameraPage> {
         _isCameraInitialized = true;
         _debugMessage = "";
       });
-      debugPrint("âœ… Camera initialized!");
+      debugPrint("✅ Camera initialized!");
     } catch (e) {
       if (mounted) setState(() => _debugMessage = "Error kamera: $e");
-      debugPrint("âŒ Camera error: $e");
+      debugPrint("❌ Camera error: $e");
     }
   }
 
@@ -251,7 +251,7 @@ class _CameraPageState extends State<CameraPage> {
 
     // â”€â”€ FIX: Lock filter sebelum clearPhotos() â”€â”€
     _lockedFilter = provider.selectedFilter;
-    debugPrint("ðŸŽ¨ Filter dikunci: $_lockedFilter");
+    debugPrint("✅ Filter dikunci: $_lockedFilter");
 
     provider.clearPhotos();
     setState(() {
@@ -347,7 +347,7 @@ class _CameraPageState extends State<CameraPage> {
 
       // 1. Ambil dari Webcam sebagai Utama (Prioritas Kecepatan & Kualitas 1080p)
       debugPrint(
-          "ðŸ“¸ Menggunakan Webcam untuk capture (High Quality Priority)...");
+          "✅ Menggunakan Webcam untuk capture (High Quality Priority)...");
       final XFile result = await _cameraController!.takePicture();
       raw = await result.readAsBytes();
 
@@ -369,7 +369,7 @@ class _CameraPageState extends State<CameraPage> {
           filtered, photoIndex, provider.sessionUuid); // fire & forget
       provider.addPhoto(filtered);
     } catch (e) {
-      debugPrint('âŒ Error capture: $e');
+      debugPrint('❌ Error capture: $e');
     }
   }
 
@@ -384,9 +384,9 @@ class _CameraPageState extends State<CameraPage> {
       if (!await sessionDir.exists()) await sessionDir.create(recursive: true);
       final file = File('${sessionDir.path}/photo_$index.jpg');
       await file.writeAsBytes(bytes);
-      debugPrint("ðŸ’¾ Tersimpan: ${file.path}");
+      debugPrint("✅ Tersimpan: ${file.path}");
     } catch (e) {
-      debugPrint("âŒ Gagal simpan: $e");
+      debugPrint("❌ Gagal simpan: $e");
     }
   }
 
@@ -400,10 +400,10 @@ class _CameraPageState extends State<CameraPage> {
       }
       final hwid = provider.machineId;
       if (hwid.isEmpty) {
-        debugPrint("Upload foto dibatalkan: HWID kosong.");
+        debugPrint("❌ Upload foto dibatalkan: HWID kosong.");
         return;
       }
-      debugPrint("â˜ï¸ Upload foto ${index + 1} ke server...");
+      debugPrint("✅ Upload foto ${index + 1} ke server...");
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
@@ -426,12 +426,12 @@ class _CameraPageState extends State<CameraPage> {
       } catch (_) {}
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        debugPrint("âœ… Foto ${index + 1} terupload!");
+        debugPrint("✅ Foto ${index + 1} terupload!");
       } else {
-        debugPrint("âŒ Upload foto ${index + 1} gagal: ${response.statusCode}");
+        debugPrint("❌ Upload foto ${index + 1} gagal: ${response.statusCode}");
       }
     } catch (e) {
-      debugPrint("âŒ Upload foto error: $e");
+      debugPrint("❌ Upload foto error: $e");
     }
   }
 
@@ -440,7 +440,7 @@ class _CameraPageState extends State<CameraPage> {
   // â”€â”€ FIX FREEZE: fire & forget, tidak block UI â”€â”€
   // ================================================================
   void _triggerBackgroundRender() {
-    debugPrint("ðŸŽ¬ Trigger background render...");
+    debugPrint("✅ Trigger background render...");
     if (mounted) {
       setState(() {
         _isRendering = true;
@@ -448,13 +448,13 @@ class _CameraPageState extends State<CameraPage> {
       });
     }
     final provider = Provider.of<PhotoProvider>(context, listen: false);
-    // Tidak pakai await â€” jalan di background
+    // Tidak pakai await — jalan di background
     _renderAndUploadInBackground(provider);
   }
 
   Future<void> _renderAndUploadInBackground(PhotoProvider provider) async {
     try {
-      debugPrint("ðŸ–¼ï¸ Rendering frame result...");
+      debugPrint("✅ Rendering frame result...");
 
       // Skala 2.5 memadai untuk cetak 4x6 inch di ~500 DPI (Sangat Tajam & Cepat)
       const double scale = 2.5;
@@ -472,7 +472,7 @@ class _CameraPageState extends State<CameraPage> {
       // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (provider.hasCustomSlots) {
         debugPrint(
-            "âœ… Render dengan custom slots (${provider.photoSlots.length} slot, ${provider.photos.length} foto)");
+            "✅ Render dengan custom slots (${provider.photoSlots.length} slot, ${provider.photos.length} foto)");
 
         // Pre-decode semua foto sekali
         final List<ui.Image> decodedPhotos = [];
@@ -619,14 +619,14 @@ class _CameraPageState extends State<CameraPage> {
       // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       final picture = recorder.endRecording();
       final uiImage = await picture.toImage(w.toInt(), h.toInt());
-      debugPrint("ðŸ–¼ï¸ toImage done: ${uiImage.width}x${uiImage.height}");
+      debugPrint("✅ toImage done: ${uiImage.width}x${uiImage.height}");
 
       // Step 1: rawRgba dulu (instant, tidak block)
       final byteData =
           await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) throw Exception('toByteData null');
       final rawBytes = byteData.buffer.asUint8List();
-      debugPrint("ðŸ–¼ï¸ rawRgba done: ${rawBytes.length} bytes");
+      debugPrint("✅ rawRgba done: ${rawBytes.length} bytes");
 
       // Step 2: encode PNG di isolate background
       final pngBytes = await compute(_encodePngInIsolate, {
@@ -634,7 +634,7 @@ class _CameraPageState extends State<CameraPage> {
         'height': uiImage.height,
         'raw': rawBytes,
       });
-      debugPrint("ðŸ–¼ï¸ PNG encode done: ${pngBytes.length} bytes");
+      debugPrint("✅ PNG encode done: ${pngBytes.length} bytes");
 
       provider.setFinalImageBytes(pngBytes);
       await _uploadFinalResult(pngBytes, provider.sessionUuid);
@@ -668,7 +668,7 @@ class _CameraPageState extends State<CameraPage> {
         return;
       }
 
-      debugPrint("ðŸ“¤ Mengupload hasil ke server...");
+      debugPrint("✅ Mengupload hasil ke server...");
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
@@ -690,12 +690,12 @@ class _CameraPageState extends State<CameraPage> {
       } catch (_) {}
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        debugPrint("âœ… Upload berhasil!");
+        debugPrint("✅ Upload berhasil!");
       } else {
-        debugPrint("âŒ Upload gagal: ${response.statusCode} â€” ${response.body}");
+        debugPrint("❌ Upload gagal: ${response.statusCode} — ${response.body}");
       }
     } catch (e) {
-      debugPrint("âŒ Upload error: $e");
+      debugPrint("❌ Upload error: $e");
     }
   }
 
