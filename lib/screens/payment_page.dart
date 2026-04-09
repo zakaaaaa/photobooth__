@@ -125,7 +125,7 @@ class _PaymentPageState extends State<PaymentPage> {
   // QRIS FLOW (WebView)
   // ================================================================
   void _onSelectQRIS() {
-    _log("User selected QRIS payment");
+    _log("User selected QRIS payment", verboseOnly: true);
     _paymentAttemptId++;
     _paymentFlowCancelled = false;
     setState(() {
@@ -141,16 +141,16 @@ class _PaymentPageState extends State<PaymentPage> {
     final apiService = Provider.of<ApiService>(context, listen: false);
 
     if (provider.machineId.isEmpty) {
-      _log("Machine ID empty, initializing...");
+      _log("Machine ID empty, initializing...", verboseOnly: true);
       await provider.initMachineId();
     }
-    _log("Machine ID: ${provider.machineId}");
+    _log("Machine ID: ${provider.machineId}", verboseOnly: true);
 
     final newUuid = "sesi-${DateTime.now().millisecondsSinceEpoch}";
     provider.setSessionUuid(newUuid);
-    _log("Session UUID: $newUuid");
+    _log("Session UUID: $newUuid", verboseOnly: true);
 
-    _log("Creating session on backend...");
+    _log("Creating session on backend...", verboseOnly: true);
     final sessionCreated = await apiService.startSession(
       newUuid,
       hwid: provider.machineId,
@@ -158,19 +158,19 @@ class _PaymentPageState extends State<PaymentPage> {
     );
 
     if (!sessionCreated) {
-      _log("ÃƒÂ¢Ã‚ÂÃ…â€™ Backend session creation FAILED");
+      _log("Backend session creation FAILED");
       _resetToMenu("Gagal membuat sesi. Cek koneksi internet.");
       return;
     }
-    _log("ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Backend session created");
+    _log("Backend session created", verboseOnly: true);
 
-    _log("Requesting payment link from backend...");
+    _log("Requesting payment link from backend...", verboseOnly: true);
     final paymentUrl =
         await apiService.generatePaymentLink(newUuid, hwid: provider.machineId);
-    _log("Payment URL response: $paymentUrl");
+    _log("Payment URL response: $paymentUrl", verboseOnly: true);
 
     if (mounted && paymentUrl != null) {
-      _log("Initializing WebView with URL: $paymentUrl");
+      _log("Initializing WebView with URL: $paymentUrl", verboseOnly: true);
       await _initWebView(paymentUrl);
       if (mounted) {
         setState(() {
@@ -179,20 +179,20 @@ class _PaymentPageState extends State<PaymentPage> {
       }
       _startPolling(newUuid);
     } else {
-      _log("❌ Payment URL is null or widget not mounted");
+      _log("âŒ Payment URL is null or widget not mounted");
       _resetToMenu("Gagal mendapatkan halaman pembayaran.");
     }
   }
 
   Future<void> _initWebView(String url) async {
-    _log("--- WebView Init START ---");
+    _log("--- WebView Init START ---", verboseOnly: true);
 
     // Step 1: Check WebView2 version again right before init
     try {
       final version = await WebviewController.getWebViewVersion();
-      _log("Step 1/5: WebView2 version confirmed: $version");
+      _log("Step 1/5: WebView2 version confirmed: $version", verboseOnly: true);
     } catch (e) {
-      _log("Step 1/5: ❌ WebView2 version check FAILED: $e");
+      _log("Step 1/5: âŒ WebView2 version check FAILED: $e");
       if (mounted) {
         setState(() => _webViewError =
             "WebView2 Runtime tidak ditemukan.\n\nInstall dari:\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/\n\nError: $e");
@@ -202,11 +202,11 @@ class _PaymentPageState extends State<PaymentPage> {
 
     // Step 2: Initialize controller
     try {
-      _log("Step 2/5: Calling _webviewController.initialize()...");
+      _log("Step 2/5: Calling _webviewController.initialize()...", verboseOnly: true);
       await _webviewController.initialize();
-      _log("Step 2/5: ✅ Controller initialized");
+      _log("Step 2/5: âœ… Controller initialized", verboseOnly: true);
     } catch (e, stack) {
-      _log("Step 2/5: ❌ Controller initialize FAILED: $e");
+      _log("Step 2/5: âŒ Controller initialize FAILED: $e");
       _log("Stack: $stack");
       if (mounted) {
         setState(() => _webViewError =
@@ -217,16 +217,16 @@ class _PaymentPageState extends State<PaymentPage> {
 
     // Step 3: Set background color
     try {
-      _log("Step 3/5: Setting background color...");
+      _log("Step 3/5: Setting background color...", verboseOnly: true);
       await _webviewController.setBackgroundColor(Colors.white);
-      _log("Step 3/5: ✅ Background color set");
+      _log("Step 3/5: âœ… Background color set", verboseOnly: true);
     } catch (e) {
-      _log("Step 3/5: ❌ setBackgroundColor failed (non-critical): $e");
+      _log("Step 3/5: âŒ setBackgroundColor failed (non-critical): $e");
     }
 
     // Step 4: Register event listeners
     try {
-      _log("Step 4/5: Registering event listeners...");
+      _log("Step 4/5: Registering event listeners...", verboseOnly: true);
 
       _webviewController.loadingState.listen((state) {
         _log("LoadingState changed: $state", verboseOnly: true);
@@ -245,7 +245,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
       // WebErrorStatus is an enum, not an object with .errorCode/.url
       _webviewController.onLoadError.listen((WebErrorStatus error) {
-        _log("❌ WebView LOAD ERROR: $error (${error.name})");
+        _log("âŒ WebView LOAD ERROR: $error (${error.name})");
         if (mounted) {
           setState(() => _webViewError =
               "Halaman gagal dimuat.\n\nWebErrorStatus: ${error.name}");
@@ -260,23 +260,23 @@ class _PaymentPageState extends State<PaymentPage> {
         _log("Security state changed: $state", verboseOnly: true);
       });
 
-      _log("Step 4/5: ✅ Event listeners registered");
+      _log("Step 4/5: âœ… Event listeners registered", verboseOnly: true);
     } catch (e) {
-      _log("Step 4/5: ⚠️ Some event listeners failed: $e");
+      _log("Step 4/5: âš ï¸ Some event listeners failed: $e", verboseOnly: true);
     }
 
     // Step 5: Load URL
     try {
-      _log("Step 5/5: Loading URL: $url");
+      _log("Step 5/5: Loading URL: $url", verboseOnly: true);
       await _webviewController.loadUrl(url);
-      _log("Step 5/5: ✅ loadUrl() called successfully");
+      _log("Step 5/5: âœ… loadUrl() called successfully", verboseOnly: true);
 
       if (mounted) {
         setState(() => _isWebViewReady = true);
-        _log("WebView marked as READY");
+        _log("WebView marked as READY", verboseOnly: true);
       }
     } catch (e, stack) {
-      _log("Step 5/5: ❌ loadUrl FAILED: $e");
+      _log("Step 5/5: âŒ loadUrl FAILED: $e");
       _log("Stack: $stack");
       if (mounted) {
         setState(() => _webViewError =
@@ -284,7 +284,7 @@ class _PaymentPageState extends State<PaymentPage> {
       }
     }
 
-    _log("--- WebView Init END ---");
+    _log("--- WebView Init END ---", verboseOnly: true);
   }
 
   /// Inject JavaScript to auto-select QRIS payment on DOKU checkout page
@@ -362,14 +362,14 @@ class _PaymentPageState extends State<PaymentPage> {
   // ================================================================
   void _startPolling(String uuid) {
     final attemptId = _paymentAttemptId;
-    _log("Starting payment polling for $uuid");
+    _log("Starting payment polling for $uuid", verboseOnly: true);
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted) {
         timer.cancel();
         return;
       }
       if (_paymentFlowCancelled || attemptId != _paymentAttemptId) {
-        _log("Stopping stale payment polling for $uuid");
+        _log("Stopping stale payment polling for $uuid", verboseOnly: true);
         timer.cancel();
         return;
       }
@@ -391,7 +391,7 @@ class _PaymentPageState extends State<PaymentPage> {
       _log("Ignoring late payment success because flow already ended.");
       return;
     }
-    _log("✅ Payment success!");
+    _log("âœ… Payment success!");
     if (mounted) {
       setState(() => _isPaid = true);
       Provider.of<PhotoProvider>(context, listen: false).reset();
@@ -448,7 +448,7 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ MENU PILIHAN ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ MENU PILIHAN ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   Widget _buildSelectionMenu() {
     final appConfig = Provider.of<AppConfigProvider>(context, listen: false);
     final canUseQris = appConfig.paymentMethodsEnabled.contains('qris');
@@ -489,7 +489,7 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ PAYMENT WEBVIEW ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ PAYMENT WEBVIEW ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   Widget _buildPaymentWebView() {
     return Container(
       width: 500,
@@ -580,7 +580,7 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ WEBVIEW ERROR VIEW ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ WEBVIEW ERROR VIEW ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   Widget _buildWebViewErrorView() {
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -626,7 +626,7 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ VOUCHER INPUT ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ VOUCHER INPUT ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   Widget _buildVoucherInput() {
     return Container(
       width: 580, // Increased width to fit keyboard
@@ -723,7 +723,7 @@ class _PaymentPageState extends State<PaymentPage> {
                 _voucherError = "";
                 _voucherController.clear();
               }),
-              child: const Text("← Kembali",
+              child: const Text("â† Kembali",
                   style: TextStyle(color: Colors.black54)),
             ),
           ],

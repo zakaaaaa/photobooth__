@@ -489,7 +489,7 @@ class _CameraPageState extends State<CameraPage> {
           final image = decodedPhotos[pidx];
 
           debugPrint(
-              "  Slot ${si + 1}: photoIndex=${slot.photoIndex} â†’ foto ${pidx + 1}, rot=${slot.rotation}Â°");
+              "  Slot ${si + 1}: photoIndex=${slot.photoIndex} - foto ${pidx + 1}, rot=${slot.rotation}Â°");
 
           final double dx = slot.x * scale;
           final double dy = slot.y * scale;
