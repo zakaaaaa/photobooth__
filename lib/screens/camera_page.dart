@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart'
     show compute, consolidateHttpClientResponseBytes;
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
@@ -60,6 +61,12 @@ class _CameraPageState extends State<CameraPage> {
 
   bool _isRendering = false;
   bool _renderDone = false;
+  final ScrollController _photoSessionScrollController = ScrollController();
+  static const double _sessionPreviewAspectRatio = 16 / 9;
+  static const double _sessionScrollbarReservedSpace = 26;
+  static const double _resultsSidebarWidth = 176;
+  static const double _resultsSidebarRightInset = 16;
+  static const double _resultsSidebarGap = 12;
 
   //  FIX FILTER: simpan filter yang dipilih sebelum sesi dimulai â”€â”€
   PhotoFilter _lockedFilter = PhotoFilter.none;
@@ -184,6 +191,7 @@ class _CameraPageState extends State<CameraPage> {
   @override
   void dispose() {
     _cameraController?.dispose();
+    _photoSessionScrollController.dispose();
     super.dispose();
   }
 
@@ -844,11 +852,11 @@ class _CameraPageState extends State<CameraPage> {
 
           // 5. SIDEBAR â”€â”€
           Positioned(
-            right: 16,
+            right: _resultsSidebarRightInset,
             top: 20,
             bottom: 20,
             child: Container(
-              width: 140,
+              width: _resultsSidebarWidth,
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: 0.55),
@@ -971,101 +979,163 @@ class _CameraPageState extends State<CameraPage> {
 
                   // Foto thumbnails
                   Expanded(
-                    child: ListView.separated(
-                      itemCount: total,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (ctx, i) {
-                        final has = i < done;
-                        final canRetake = has && !_isSessionActive && complete;
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: ScrollConfiguration(
+                        behavior: const _TouchFriendlyScrollBehavior(),
+                        child: RawScrollbar(
+                          controller: _photoSessionScrollController,
+                          thumbVisibility: true,
+                          trackVisibility: true,
+                          interactive: true,
+                          thickness: 15,
+                          crossAxisMargin: 2,
+                          mainAxisMargin: 4,
+                          radius: const Radius.circular(12),
+                          minThumbLength: 56,
+                          thumbColor: const Color(0xFFFFD84D),
+                          trackColor: Colors.white.withValues(alpha: 0.12),
+                          trackBorderColor: Colors.white24,
+                          child: ListView.separated(
+                            controller: _photoSessionScrollController,
+                            padding: const EdgeInsets.only(
+                                right: _sessionScrollbarReservedSpace),
+                            physics: const ClampingScrollPhysics(),
+                            itemCount: total,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (ctx, i) {
+                              final has = i < done;
+                              final canRetake = has && !_isSessionActive && complete;
 
-                        return GestureDetector(
-                          onTap:
-                              canRetake ? () => _retakeSpecificPhoto(i) : null,
-                          child: Stack(
-                            children: [
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                height: 110,
-                                decoration: BoxDecoration(
-                                  color: has
-                                      ? Colors.transparent
-                                      : Colors.white.withValues(alpha: 0.08),
-                                  border: Border.all(
-                                      color:
-                                          has ? Colors.white54 : Colors.white24,
-                                      width: has ? 2 : 1),
-                                  borderRadius: BorderRadius.circular(10),
-                                  image: has
-                                      ? DecorationImage(
-                                          image: MemoryImage(
-                                              provider.photos[i].imageData),
-                                          fit: BoxFit.cover)
-                                      : null,
-                                ),
-                                child: !has
-                                    ? Center(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.camera_alt,
-                                                color: Colors.white24,
-                                                size: _isSessionActive &&
-                                                        i == done
-                                                    ? 28
-                                                    : 20),
-                                            if (_isSessionActive && i == done)
-                                              const Padding(
-                                                padding:
-                                                    EdgeInsets.only(top: 4),
-                                                child: SizedBox(
-                                                    width: 16,
-                                                    height: 16,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                            color: Colors
-                                                                .white38)),
+                              return LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final cardHeight = (constraints.maxWidth /
+                                          _sessionPreviewAspectRatio)
+                                      .clamp(84.0, 118.0);
+                                  final iconSize = (_isSessionActive && i == done)
+                                      ? (cardHeight * 0.34).clamp(22.0, 30.0)
+                                      : (cardHeight * 0.3).clamp(18.0, 24.0);
+                                  final spinnerSize =
+                                      (cardHeight * 0.22).clamp(12.0, 18.0);
+                                  final placeholderGap =
+                                      (cardHeight * 0.08).clamp(3.0, 6.0);
+                                  return GestureDetector(
+                                    onTap: canRetake
+                                        ? () => _retakeSpecificPhoto(i)
+                                        : null,
+                                    child: SizedBox(
+                                      height: cardHeight,
+                                      child: Stack(
+                                        children: [
+                                          AnimatedContainer(
+                                            duration:
+                                                const Duration(milliseconds: 300),
+                                            width: double.infinity,
+                                            height: cardHeight,
+                                            decoration: BoxDecoration(
+                                              color: has
+                                                  ? Colors.transparent
+                                                  : Colors.white.withValues(
+                                                      alpha: 0.08),
+                                              border: Border.all(
+                                                  color: has
+                                                      ? Colors.white54
+                                                      : Colors.white24,
+                                                  width: has ? 2 : 1),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              image: has
+                                                  ? DecorationImage(
+                                                      image: MemoryImage(
+                                                          provider
+                                                              .photos[i].imageData),
+                                                      fit: BoxFit.cover)
+                                                  : null,
+                                            ),
+                                            child: !has
+                                                ? Center(
+                                                    child: Column(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        Icon(Icons.camera_alt,
+                                                            color: Colors.white24,
+                                                            size: iconSize),
+                                                        if (_isSessionActive &&
+                                                            i == done)
+                                                          Padding(
+                                                            padding: EdgeInsets.only(
+                                                                top:
+                                                                    placeholderGap),
+                                                            child: SizedBox(
+                                                                width: spinnerSize,
+                                                                height:
+                                                                    spinnerSize,
+                                                                child:
+                                                                    const CircularProgressIndicator(
+                                                                        strokeWidth:
+                                                                            2,
+                                                                        color: Colors
+                                                                            .white38)),
+                                                          ),
+                                                      ],
+                                                    ),
+                                                  )
+                                                : null,
+                                          ),
+                                          if (canRetake)
+                                            Positioned(
+                                              right: 0,
+                                              bottom: 0,
+                                              child: Container(
+                                                padding: const EdgeInsets.all(5),
+                                                decoration: const BoxDecoration(
+                                                    color: Color(0xFFEF4444),
+                                                    borderRadius:
+                                                        BorderRadius.only(
+                                                            topLeft:
+                                                                Radius.circular(
+                                                                    8),
+                                                            bottomRight:
+                                                                Radius.circular(
+                                                                    9))),
+                                                child: const Icon(Icons.refresh,
+                                                    size: 16,
+                                                    color: Colors.white),
                                               ),
-                                          ],
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                              if (canRetake)
-                                Positioned(
-                                  right: 0,
-                                  bottom: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(5),
-                                    decoration: const BoxDecoration(
-                                        color: Color(0xFFEF4444),
-                                        borderRadius: BorderRadius.only(
-                                            topLeft: Radius.circular(8),
-                                            bottomRight: Radius.circular(9))),
-                                    child: const Icon(Icons.refresh,
-                                        size: 16, color: Colors.white),
-                                  ),
-                                ),
-                              Positioned(
-                                top: 4,
-                                left: 6,
-                                child: Text('${i + 1}',
-                                    style: TextStyle(
-                                        color: has
-                                            ? Colors.white70
-                                            : Colors.white24,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        shadows: const [
-                                          Shadow(
-                                              color: Colors.black,
-                                              blurRadius: 4)
-                                        ])),
-                              ),
-                            ],
+                                            ),
+                                          Positioned(
+                                            top: 4,
+                                            left: 6,
+                                            child: Text('${i + 1}',
+                                                style: TextStyle(
+                                                    color: has
+                                                        ? Colors.white70
+                                                        : Colors.white24,
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    shadows: const [
+                                                      Shadow(
+                                                          color: Colors.black,
+                                                          blurRadius: 4)
+                                                    ])),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
                           ),
-                        );
-                      },
+                        ),
+                      ),
                     ),
                   ),
 
@@ -1087,7 +1157,9 @@ class _CameraPageState extends State<CameraPage> {
           // 6. BOTTOM CONTROLS â”€â”€
           Positioned(
             left: 0,
-            right: 168,
+            right: _resultsSidebarRightInset +
+                _resultsSidebarWidth +
+                _resultsSidebarGap,
             bottom: 40,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1226,6 +1298,18 @@ class _CameraPageState extends State<CameraPage> {
       ),
     );
   }
+}
+
+class _TouchFriendlyScrollBehavior extends MaterialScrollBehavior {
+  const _TouchFriendlyScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.unknown,
+      };
 }
 
 // ================================================================
