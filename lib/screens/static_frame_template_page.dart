@@ -96,6 +96,11 @@ class _StaticFrameTemplatePageState extends State<StaticFrameTemplatePage> {
   List<FrameTemplate> _templates = [];
   bool _isLoading = true;
   String _error   = '';
+  int _currentPage = 0;
+
+  static const int _columnsPerPage = 4;
+  static const int _rowsPerPage = 1;
+  static const int _itemsPerPage = _columnsPerPage * _rowsPerPage;
 
   static final String _baseUrl = '${ConfigService().baseUrl}/api';
 
@@ -145,6 +150,7 @@ class _StaticFrameTemplatePageState extends State<StaticFrameTemplatePage> {
           setState(() {
             _templates = framesJson.map((j) => FrameTemplate.fromJson(j)).toList();
             _isLoading = false;
+            _currentPage = 0;
           });
           return;
         }
@@ -205,17 +211,155 @@ class _StaticFrameTemplatePageState extends State<StaticFrameTemplatePage> {
   }
 
   Widget _buildGrid() {
+    final totalPagesRaw = (_templates.length / _itemsPerPage).ceil();
+    final totalPages = totalPagesRaw < 1 ? 1 : totalPagesRaw;
+    final safeCurrentPage = _currentPage >= totalPages ? totalPages - 1 : _currentPage;
+
+    final start = safeCurrentPage * _itemsPerPage;
+    final end = (start + _itemsPerPage) > _templates.length
+        ? _templates.length
+        : (start + _itemsPerPage);
+    final pageItems = _templates.sublist(start, end);
+    final canGoPrev = safeCurrentPage > 0;
+    final canGoNext = safeCurrentPage < totalPages - 1;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 40),
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
-          crossAxisSpacing: 20,
-          mainAxisSpacing: 20,
-          childAspectRatio: 0.55,
+      child: Column(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const spacingX = 20.0;
+                const spacingY = 20.0;
+
+                const totalSpacingX = (_columnsPerPage - 1) * spacingX;
+                const totalSpacingY = (_rowsPerPage - 1) * spacingY;
+                final itemWidth = (constraints.maxWidth - totalSpacingX) / _columnsPerPage;
+                final itemHeight = (constraints.maxHeight - totalSpacingY) / _rowsPerPage;
+
+                // Menjaga rasio kartu tetap terbaca dan tidak terpotong di berbagai resolusi layar.
+                final dynamicAspectRatio = (itemWidth / itemHeight).clamp(0.42, 0.75);
+
+                return GridView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _columnsPerPage,
+                    crossAxisSpacing: spacingX,
+                    mainAxisSpacing: spacingY,
+                    childAspectRatio: dynamicAspectRatio,
+                  ),
+                  itemCount: pageItems.length,
+                  itemBuilder: (context, index) => RetroFrameCard(template: pageItems[index]),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildPaginationControls(
+            canGoPrev: canGoPrev,
+            canGoNext: canGoNext,
+            pageNumber: safeCurrentPage + 1,
+            totalPages: totalPages,
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaginationControls({
+    required bool canGoPrev,
+    required bool canGoNext,
+    required int pageNumber,
+    required int totalPages,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildPageButton(
+          label: 'SEBELUMNYA',
+          icon: Icons.arrow_back_rounded,
+          enabled: canGoPrev,
+          onTap: () {
+            if (!canGoPrev) return;
+            setState(() => _currentPage--);
+          },
         ),
-        itemCount: _templates.length,
-        itemBuilder: (context, index) => RetroFrameCard(template: _templates[index]),
+        const SizedBox(width: 24),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.65),
+            border: Border.all(color: Colors.white24, width: 1.4),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            'HALAMAN $pageNumber / $totalPages',
+            style: const TextStyle(
+              fontFamily: 'Ambitsek',
+              color: Colors.white,
+              fontSize: 14,
+              letterSpacing: 1.1,
+            ),
+          ),
+        ),
+        const SizedBox(width: 24),
+        _buildPageButton(
+          label: 'BERIKUTNYA',
+          icon: Icons.arrow_forward_rounded,
+          enabled: canGoNext,
+          isIconTrailing: true,
+          onTap: () {
+            if (!canGoNext) return;
+            setState(() => _currentPage++);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPageButton({
+    required String label,
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+    bool isIconTrailing = false,
+  }) {
+    final backgroundColor = enabled
+        ? const Color(0xFF0000AA)
+        : const Color(0xFF424242);
+    final borderColor = enabled ? Colors.white54 : Colors.white24;
+
+    final iconWidget = Icon(icon, color: Colors.white, size: 24);
+    final textWidget = Text(
+      label,
+      style: const TextStyle(
+        fontFamily: 'Ambitsek',
+        color: Colors.white,
+        fontSize: 14,
+        letterSpacing: 1.0,
+      ),
+    );
+
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          border: Border.all(color: borderColor, width: 2),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: enabled
+              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), offset: const Offset(2, 2))]
+              : null,
+        ),
+        child: Row(
+          children: isIconTrailing
+              ? [textWidget, const SizedBox(width: 8), iconWidget]
+              : [iconWidget, const SizedBox(width: 8), textWidget],
+        ),
       ),
     );
   }

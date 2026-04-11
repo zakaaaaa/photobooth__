@@ -192,7 +192,7 @@ class _PaymentPageState extends State<PaymentPage> {
       final version = await WebviewController.getWebViewVersion();
       _log("Step 1/5: WebView2 version confirmed: $version", verboseOnly: true);
     } catch (e) {
-      _log("Step 1/5: âŒ WebView2 version check FAILED: $e");
+      _log("Step 1/5: ❌ WebView2 version check FAILED: $e");
       if (mounted) {
         setState(() => _webViewError =
             "WebView2 Runtime tidak ditemukan.\n\nInstall dari:\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/\n\nError: $e");
@@ -202,11 +202,12 @@ class _PaymentPageState extends State<PaymentPage> {
 
     // Step 2: Initialize controller
     try {
-      _log("Step 2/5: Calling _webviewController.initialize()...", verboseOnly: true);
+      _log("Step 2/5: Calling _webviewController.initialize()...",
+          verboseOnly: true);
       await _webviewController.initialize();
-      _log("Step 2/5: âœ… Controller initialized", verboseOnly: true);
+      _log("Step 2/5: ✅ Controller initialized", verboseOnly: true);
     } catch (e, stack) {
-      _log("Step 2/5: âŒ Controller initialize FAILED: $e");
+      _log("Step 2/5: ❌ Controller initialize FAILED: $e");
       _log("Stack: $stack");
       if (mounted) {
         setState(() => _webViewError =
@@ -219,9 +220,9 @@ class _PaymentPageState extends State<PaymentPage> {
     try {
       _log("Step 3/5: Setting background color...", verboseOnly: true);
       await _webviewController.setBackgroundColor(Colors.white);
-      _log("Step 3/5: âœ… Background color set", verboseOnly: true);
+      _log("Step 3/5: ✅ Background color set", verboseOnly: true);
     } catch (e) {
-      _log("Step 3/5: âŒ setBackgroundColor failed (non-critical): $e");
+      _log("Step 3/5: ❌ setBackgroundColor failed (non-critical): $e");
     }
 
     // Step 4: Register event listeners
@@ -245,7 +246,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
       // WebErrorStatus is an enum, not an object with .errorCode/.url
       _webviewController.onLoadError.listen((WebErrorStatus error) {
-        _log("âŒ WebView LOAD ERROR: $error (${error.name})");
+        _log("❌ WebView LOAD ERROR: $error (${error.name})");
         if (mounted) {
           setState(() => _webViewError =
               "Halaman gagal dimuat.\n\nWebErrorStatus: ${error.name}");
@@ -260,23 +261,23 @@ class _PaymentPageState extends State<PaymentPage> {
         _log("Security state changed: $state", verboseOnly: true);
       });
 
-      _log("Step 4/5: âœ… Event listeners registered", verboseOnly: true);
+      _log("Step 4/5: ✅ Event listeners registered", verboseOnly: true);
     } catch (e) {
-      _log("Step 4/5: âš ï¸ Some event listeners failed: $e", verboseOnly: true);
+      _log("Step 4/5: ⚠️ Some event listeners failed: $e", verboseOnly: true);
     }
 
     // Step 5: Load URL
     try {
       _log("Step 5/5: Loading URL: $url", verboseOnly: true);
       await _webviewController.loadUrl(url);
-      _log("Step 5/5: âœ… loadUrl() called successfully", verboseOnly: true);
+      _log("Step 5/5: ✅ loadUrl() called successfully", verboseOnly: true);
 
       if (mounted) {
         setState(() => _isWebViewReady = true);
         _log("WebView marked as READY", verboseOnly: true);
       }
     } catch (e, stack) {
-      _log("Step 5/5: âŒ loadUrl FAILED: $e");
+      _log("Step 5/5: ❌ loadUrl FAILED: $e");
       _log("Stack: $stack");
       if (mounted) {
         setState(() => _webViewError =
@@ -391,7 +392,7 @@ class _PaymentPageState extends State<PaymentPage> {
       _log("Ignoring late payment success because flow already ended.");
       return;
     }
-    _log("âœ… Payment success!");
+    _log("✅ Payment success!");
     if (mounted) {
       setState(() => _isPaid = true);
       Provider.of<PhotoProvider>(context, listen: false).reset();
@@ -580,7 +581,7 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ WEBVIEW ERROR VIEW ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+  // WEBVIEW ERROR VIEW
   Widget _buildWebViewErrorView() {
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -626,7 +627,7 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ VOUCHER INPUT ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+  // VOUCHER INPUT
   Widget _buildVoucherInput() {
     return Container(
       width: 580, // Increased width to fit keyboard
@@ -723,7 +724,7 @@ class _PaymentPageState extends State<PaymentPage> {
                 _voucherError = "";
                 _voucherController.clear();
               }),
-              child: const Text("â† Kembali",
+              child: const Text("← Kembali",
                   style: TextStyle(color: Colors.black54)),
             ),
           ],
