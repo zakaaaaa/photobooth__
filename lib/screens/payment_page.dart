@@ -364,7 +364,7 @@ class _PaymentPageState extends State<PaymentPage> {
   void _startPolling(String uuid) {
     final attemptId = _paymentAttemptId;
     _log("Starting payment polling for $uuid", verboseOnly: true);
-    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       if (!mounted) {
         timer.cancel();
         return;
