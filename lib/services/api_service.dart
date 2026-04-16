@@ -196,6 +196,32 @@ class ApiService {
     return null;
   }
 
+  Future<bool> attachFrameToSession({
+    required String sessionUuid,
+    required String frameId,
+    required String hwid,
+  }) async {
+    try {
+      final uri = Uri.parse("$baseUrl/photobooth/session/attach-frame");
+      final response = await http.patch(
+        uri,
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: jsonEncode({
+          'session_uuid': sessionUuid,
+          'frame_id': frameId,
+          'hwid': hwid,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      AppLogger.debug("Attach frame error: $e");
+      return false;
+    }
+  }
+
   Future<bool> sendResultEmail({
     required String hwid,
     required String recipientEmail,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../services/config_service.dart';
+import '../services/api_service.dart';
 import '../providers/photo_provider.dart';
 import 'camera_page.dart';
 
@@ -17,6 +18,9 @@ class FrameTemplate {
   final int photoCount;
   final double outputWidth;
   final double outputHeight;
+  final String? orientation;
+  final bool needsLayoutReview;
+  final String? layoutReviewReason;
   final FrameLayout layout;
   final List<PhotoSlot> photoSlots;
 
@@ -28,6 +32,9 @@ class FrameTemplate {
     required this.photoCount,
     required this.outputWidth,
     required this.outputHeight,
+    required this.orientation,
+    required this.needsLayoutReview,
+    required this.layoutReviewReason,
     required this.layout,
     required this.photoSlots,
   });
@@ -57,6 +64,9 @@ class FrameTemplate {
       photoCount:   count,
       outputWidth:  (json['output_width']  as num?)?.toDouble() ?? 344.0,
       outputHeight: (json['output_height'] as num?)?.toDouble() ?? 515.0,
+      orientation: (json['orientation'] as String?)?.trim(),
+      needsLayoutReview: json['needs_layout_review'] == true,
+      layoutReviewReason: (json['layout_review_reason'] as String?)?.trim(),
       layout:       _layoutForCount(count),
       photoSlots:   slots,
     );
@@ -490,9 +500,55 @@ class _RetroFrameCardState extends State<RetroFrameCard> {
     }).toList();
   }
 
-  void _handleSelection() {
+  Future<void> _handleSelection() async {
     final provider = Provider.of<PhotoProvider>(context, listen: false);
     final template = widget.template;
+
+    if (template.needsLayoutReview) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Frame ini perlu review layout (${template.layoutReviewReason ?? 'mismatch besar'}). Pilih frame lain.",
+          ),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+
+    if (provider.machineId.isEmpty) {
+      await provider.initMachineId();
+    }
+    final hwid = provider.machineId;
+    final sessionUuid = provider.sessionUuid;
+    if (sessionUuid.isEmpty || hwid.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Sesi belum siap. Ulangi dari halaman pembayaran."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final attached = await ApiService().attachFrameToSession(
+      sessionUuid: sessionUuid,
+      frameId: template.id,
+      hwid: hwid,
+    );
+    if (!attached) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Gagal mengunci frame ke sesi. Coba lagi."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
 
     if (template.hasCustomSlots) {
       provider.setFrameModeWithSlots(

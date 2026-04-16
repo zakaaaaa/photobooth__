@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -9,43 +10,58 @@ class PrintService {
   factory PrintService() => _instance;
   PrintService._internal();
 
-  /// Logika cetak standar untuk Photobooth (4R / 4x6 inch)
+  /// Standard print flow for photobooth output.
+  /// Landscape images are normalized to portrait before print to avoid crop.
   Future<bool> printStrip(BuildContext context, Uint8List imageBytes,
       {String sessionUuid = 'history',
       int copies = 1,
       String printerKeyword = 'epson',
       String paperSize = '4R'}) async {
     bool printSuccess = false;
+    final payload = _preparePrintPayload(
+      paperSize: paperSize,
+      imageBytes: imageBytes,
+    );
+    final pdfFormat = payload.pageFormat;
+    final printableBytes = payload.printBytes;
+
+    debugPrint(
+      'Print resolved | paper_size=$paperSize image_ratio=${payload.imageRatio.toStringAsFixed(4)} resolved_orientation=${payload.orientation} rotated=${payload.rotated}',
+    );
 
     try {
-      final pdfFormat = _paperFormatFor(paperSize);
-
       Future<Uint8List> generateDoc(PdfPageFormat format) async {
         final doc = pw.Document();
-        final image = pw.MemoryImage(imageBytes);
-        doc.addPage(pw.Page(
-          pageFormat: format,
-          build: (_) => pw.FullPage(
-            ignoreMargins: true,
-            child: pw.Image(image, fit: pw.BoxFit.cover, dpi: 300),
+        final image = pw.MemoryImage(printableBytes);
+        doc.addPage(
+          pw.Page(
+            pageFormat: format,
+            build: (_) => pw.Container(
+              color: PdfColors.white,
+              child: pw.FullPage(
+                ignoreMargins: true,
+                child: pw.Image(image, fit: pw.BoxFit.contain, dpi: 300),
+              ),
+            ),
           ),
-        ));
+        );
         return doc.save();
       }
 
-      // Mencoba mencari printer tertentu (Epson/D500) atau Default
       Printer? targetPrinter;
       try {
         final printers = await Printing.listPrinters();
         targetPrinter = printers.firstWhere(
           (p) =>
               p.name.toLowerCase().contains(printerKeyword.toLowerCase()) ||
-              p.name.toLowerCase().contains("d500"),
-          orElse: () => printers.firstWhere((p) => p.isDefault,
-              orElse: () => printers.first),
+              p.name.toLowerCase().contains('d500'),
+          orElse: () => printers.firstWhere(
+            (p) => p.isDefault,
+            orElse: () => printers.first,
+          ),
         );
       } catch (e) {
-        debugPrint("⚠️ Gagal scan printer: $e");
+        debugPrint('Warning: gagal scan printer: $e');
       }
 
       if (targetPrinter != null && targetPrinter.isAvailable) {
@@ -57,62 +73,116 @@ class PrintService {
             usePrinterSettings: true,
           );
           if (res) printSuccess = true;
-          // Beri sedikit jeda antar spool jika perlu (opsional)
           if (copies > 1) {
             await Future.delayed(const Duration(milliseconds: 500));
           }
         }
       }
     } catch (e) {
-      debugPrint("❌ Print error: $e");
+      debugPrint('Print error: $e');
     }
 
-    // Fallback: Jika direct print gagal, gunakan layout picker standard
     if (!printSuccess) {
       try {
         await Printing.layoutPdf(
           onLayout: (format) async {
             final doc = pw.Document();
-            final image = pw.MemoryImage(imageBytes);
-            doc.addPage(pw.Page(
-              pageFormat: _paperFormatFor(paperSize),
-              build: (_) => pw.FullPage(
-                ignoreMargins: true,
-                child: pw.Image(image, fit: pw.BoxFit.cover, dpi: 300),
+            final image = pw.MemoryImage(printableBytes);
+            doc.addPage(
+              pw.Page(
+                pageFormat: pdfFormat,
+                build: (_) => pw.Container(
+                  color: PdfColors.white,
+                  child: pw.FullPage(
+                    ignoreMargins: true,
+                    child: pw.Image(image, fit: pw.BoxFit.contain, dpi: 300),
+                  ),
+                ),
               ),
-            ));
+            );
             return doc.save();
           },
           name: 'Photobooth_$sessionUuid',
         );
-        printSuccess = true; // Anggap sukses jika jendela print terbuka
+        printSuccess = true;
       } catch (e) {
-        debugPrint("❌ Layout Print error: $e");
+        debugPrint('Layout print error: $e');
       }
     }
 
     return printSuccess;
   }
 
-  PdfPageFormat _paperFormatFor(String paperSize) {
+  _PaperFormatResolution _preparePrintPayload({
+    required String paperSize,
+    required Uint8List imageBytes,
+  }) {
+    final decoded = img.decodeImage(imageBytes);
+    final width = decoded?.width ?? 1;
+    final height = decoded?.height ?? 1;
+    final imageRatio = width / height;
+    final isLandscape = width > height;
+
+    final normalizedImage = (decoded != null && isLandscape)
+        ? img.copyRotate(decoded, angle: 90)
+        : decoded;
+
+    final normalizedBytes = normalizedImage == null
+        ? imageBytes
+        : Uint8List.fromList(img.encodeJpg(normalizedImage, quality: 95));
+
     switch (paperSize.toUpperCase()) {
       case 'A4':
-        return PdfPageFormat.a4.copyWith(
-          marginLeft: 0,
-          marginTop: 0,
-          marginRight: 0,
-          marginBottom: 0,
+        return _PaperFormatResolution(
+          printBytes: normalizedBytes,
+          pageFormat: PdfPageFormat.a4.copyWith(
+            marginLeft: 0,
+            marginTop: 0,
+            marginRight: 0,
+            marginBottom: 0,
+          ),
+          orientation: 'portrait',
+          imageRatio: imageRatio,
+          rotated: isLandscape,
         );
       case 'A5':
-        return PdfPageFormat.a5.copyWith(
-          marginLeft: 0,
-          marginTop: 0,
-          marginRight: 0,
-          marginBottom: 0,
+        return _PaperFormatResolution(
+          printBytes: normalizedBytes,
+          pageFormat: PdfPageFormat.a5.copyWith(
+            marginLeft: 0,
+            marginTop: 0,
+            marginRight: 0,
+            marginBottom: 0,
+          ),
+          orientation: 'portrait',
+          imageRatio: imageRatio,
+          rotated: isLandscape,
         );
       case '4R':
       default:
-        return const PdfPageFormat(4.0 * 72.0, 6.0 * 72.0, marginAll: 0);
+        return _PaperFormatResolution(
+          printBytes: normalizedBytes,
+          pageFormat: const PdfPageFormat(4.0 * 72.0, 6.0 * 72.0, marginAll: 0),
+          orientation: 'portrait',
+          imageRatio: imageRatio,
+          rotated: isLandscape,
+        );
     }
   }
+}
+
+class _PaperFormatResolution {
+  final Uint8List printBytes;
+  final PdfPageFormat pageFormat;
+  final String orientation;
+  final double imageRatio;
+  final bool rotated;
+
+  const _PaperFormatResolution({
+    required this.printBytes,
+    required this.pageFormat,
+    required this.orientation,
+    required this.imageRatio,
+    required this.rotated,
+  });
 }
