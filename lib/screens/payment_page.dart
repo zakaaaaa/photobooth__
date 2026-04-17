@@ -151,15 +151,18 @@ class _PaymentPageState extends State<PaymentPage> {
     _log("Session UUID: $newUuid", verboseOnly: true);
 
     _log("Creating session on backend...", verboseOnly: true);
-    final sessionCreated = await apiService.startSession(
+    final sessionStartResult = await apiService.startSessionDetailed(
       newUuid,
       hwid: provider.machineId,
       paymentMethod: 'qris',
     );
 
-    if (!sessionCreated) {
-      _log("Backend session creation FAILED");
-      _resetToMenu("Gagal membuat sesi. Cek koneksi internet.");
+    if (!sessionStartResult.success) {
+      _log("Backend session creation FAILED: ${sessionStartResult.code}");
+      _resetToMenu(
+        sessionStartResult.message ??
+            "Gagal membuat sesi. Cek koneksi internet.",
+      );
       return;
     }
     _log("Backend session created", verboseOnly: true);
@@ -339,7 +342,7 @@ class _PaymentPageState extends State<PaymentPage> {
     final newUuid = "voucher-${DateTime.now().millisecondsSinceEpoch}";
     provider.setSessionUuid(newUuid);
 
-    final success = await apiService.startSession(
+    final sessionStartResult = await apiService.startSessionDetailed(
       newUuid,
       hwid: provider.machineId,
       paymentMethod: 'voucher',
@@ -348,11 +351,12 @@ class _PaymentPageState extends State<PaymentPage> {
 
     if (!mounted) return;
 
-    if (success) {
+    if (sessionStartResult.success) {
       _handlePaymentSuccess();
     } else {
       setState(() {
-        _voucherError = "Kode voucher tidak valid atau sudah habis.";
+        _voucherError =
+            sessionStartResult.message ?? "Kode voucher tidak valid atau sudah habis.";
         _isValidatingVoucher = false;
       });
     }

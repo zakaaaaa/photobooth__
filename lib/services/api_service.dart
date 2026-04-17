@@ -6,6 +6,18 @@ import 'package:photobooth_app/services/app_logger.dart';
 
 import 'config_service.dart';
 
+class SessionStartResult {
+  final bool success;
+  final String? message;
+  final String? code;
+
+  const SessionStartResult({
+    required this.success,
+    this.message,
+    this.code,
+  });
+}
+
 class ApiService {
   static const Set<String> _allowedPaymentMethods = {'qris', 'voucher'};
 
@@ -46,7 +58,7 @@ class ApiService {
     }
   }
 
-  Future<bool> startSession(
+  Future<SessionStartResult> startSessionDetailed(
     String uuid, {
     required String hwid,
     String paymentMethod = 'qris',
@@ -57,7 +69,11 @@ class ApiService {
     if (!_allowedPaymentMethods.contains(paymentMethod)) {
       AppLogger.warn(
           "Rejected unsupported payment method: $paymentMethod (uuid: $uuid)");
-      return false;
+      return const SessionStartResult(
+        success: false,
+        message: "Metode pembayaran tidak didukung.",
+        code: "UNSUPPORTED_PAYMENT_METHOD",
+      );
     }
 
     try {
@@ -87,11 +103,51 @@ class ApiService {
 
       AppLogger.debug(
           "Start session response: ${response.statusCode} - ${response.body}");
-      return response.statusCode == 200 || response.statusCode == 201;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return const SessionStartResult(success: true);
+      }
+
+      try {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        return SessionStartResult(
+          success: false,
+          message: data['message'] as String?,
+          code: data['code'] as String?,
+        );
+      } catch (_) {
+        return const SessionStartResult(
+          success: false,
+          message: "Gagal membuat sesi.",
+          code: "SESSION_START_FAILED",
+        );
+      }
     } catch (e) {
       AppLogger.debug("Error Start Session: $e");
-      return false;
+      return const SessionStartResult(
+        success: false,
+        message: "Gagal terhubung ke server.",
+        code: "NETWORK_ERROR",
+      );
     }
+  }
+
+  Future<bool> startSession(
+    String uuid, {
+    required String hwid,
+    String paymentMethod = 'qris',
+    String transactionType = 'session',
+    int extraPrintCount = 0,
+    String? voucherCode,
+  }) async {
+    final result = await startSessionDetailed(
+      uuid,
+      hwid: hwid,
+      paymentMethod: paymentMethod,
+      transactionType: transactionType,
+      extraPrintCount: extraPrintCount,
+      voucherCode: voucherCode,
+    );
+    return result.success;
   }
 
   Future<String?> generatePaymentLink(String sessionUuid, {required String hwid}) async {
